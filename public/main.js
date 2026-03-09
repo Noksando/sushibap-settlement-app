@@ -206,6 +206,7 @@ function renderSettlementList() {
     const dailyExpense = dailyExpenseForDate(entry.storeName, entry.date);
     const fixedDaily = fixedPerDay(entry.storeName, entry.date);
     const net = sales - dailyExpense - fixedDaily;
+
     const li = document.createElement("li");
     li.className = "settlement-item";
     li.innerHTML = `
@@ -224,8 +225,7 @@ function renderSettlementList() {
       <button class="delete-btn">삭제</button>
     `;
     li.querySelector(".delete-btn").addEventListener("click", () => {
-      const ok = window.confirm("이 정산 기록을 삭제할까요?");
-      if (!ok) {
+      if (!window.confirm("이 정산 기록을 삭제할까요?")) {
         return;
       }
       socket.emit("settlement:remove", { id: entry.id });
@@ -257,8 +257,7 @@ function renderExpenseList() {
       <button class="delete-btn">삭제</button>
     `;
     li.querySelector(".delete-btn").addEventListener("click", () => {
-      const ok = window.confirm("이 재료비 지출을 삭제할까요?");
-      if (!ok) {
+      if (!window.confirm("이 재료비 지출을 삭제할까요?")) {
         return;
       }
       socket.emit("expense:remove", { id: entry.id });
@@ -293,8 +292,7 @@ function renderFixedCostList() {
       <button class="delete-btn">삭제</button>
     `;
     li.querySelector(".delete-btn").addEventListener("click", () => {
-      const ok = window.confirm("이 월 고정비를 삭제할까요?");
-      if (!ok) {
+      if (!window.confirm("이 월 고정비를 삭제할까요?")) {
         return;
       }
       socket.emit("fixedCost:remove", { id: entry.id });
@@ -370,8 +368,7 @@ function calcWeekSummary(weekStart) {
 
   FINANCE_STORES.forEach((store) => {
     for (let offset = 0; offset < 7; offset += 1) {
-      const day = addDaysISO(weekStart, offset);
-      totalsByStore[store].fixedCost += fixedPerDay(store, day);
+      totalsByStore[store].fixedCost += fixedPerDay(store, addDaysISO(weekStart, offset));
     }
   });
 
@@ -401,12 +398,10 @@ function renderWeeklySummary() {
   `;
 
   weeklyTableBodyEl.innerHTML = "";
-
   FINANCE_STORES.forEach((store) => {
     const data = totalsByStore[store];
     const sales = data.card + data.cash + data.delivery;
-    const cost = data.dailyExpense + data.fixedCost;
-    const net = sales - cost;
+    const net = sales - (data.dailyExpense + data.fixedCost);
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${store}</td>
@@ -433,19 +428,11 @@ function renderWeeklySummary() {
 }
 
 function getShadeClass(amount, target) {
-  if (amount <= 0) {
-    return "shade-0";
-  }
+  if (amount <= 0) return "shade-0";
   const ratio = Math.min(amount / target, 1);
-  if (ratio >= 0.85) {
-    return "shade-4";
-  }
-  if (ratio >= 0.6) {
-    return "shade-3";
-  }
-  if (ratio >= 0.35) {
-    return "shade-2";
-  }
+  if (ratio >= 0.85) return "shade-4";
+  if (ratio >= 0.6) return "shade-3";
+  if (ratio >= 0.35) return "shade-2";
   return "shade-1";
 }
 
@@ -453,21 +440,17 @@ function monthTotalsByStore(monthStr) {
   const [year, month] = monthStr.split("-").map(Number);
   const dayCount = daysInMonth(year, month - 1);
   const map = {};
+
   FINANCE_STORES.forEach((store) => {
     map[store] = {};
     for (let day = 1; day <= dayCount; day += 1) {
-      const key = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      map[store][key] = 0;
+      map[store][`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`] = 0;
     }
   });
 
   getSettlements().forEach((entry) => {
-    if (!entry.date.startsWith(monthStr)) {
-      return;
-    }
-    if (!map[entry.storeName] || typeof map[entry.storeName][entry.date] !== "number") {
-      return;
-    }
+    if (!entry.date.startsWith(monthStr)) return;
+    if (!map[entry.storeName] || typeof map[entry.storeName][entry.date] !== "number") return;
     map[entry.storeName][entry.date] += salesTotal(entry);
   });
 
@@ -548,10 +531,7 @@ function syncFixedInputs() {
 }
 
 function updateEntryTotalHint() {
-  const card = Number(cardAmountEl.value) || 0;
-  const cash = Number(cashAmountEl.value) || 0;
-  const delivery = Number(deliveryAmountEl.value) || 0;
-  const sales = card + cash + delivery;
+  const sales = (Number(cardAmountEl.value) || 0) + (Number(cashAmountEl.value) || 0) + (Number(deliveryAmountEl.value) || 0);
   const date = settlementDateEl.value || todayISO();
   const dailyExpense = dailyExpenseForDate(selectedStore, date);
   const fixedDaily = fixedPerDay(selectedStore, date);
@@ -561,45 +541,25 @@ function updateEntryTotalHint() {
   )} | 고정비(일할) ${formatEUR(fixedDaily)} | 예상 순이익 ${formatEUR(net)}`;
 }
 
-[cardAmountEl, cashAmountEl, deliveryAmountEl, settlementDateEl].forEach((input) => {
-  input.addEventListener("input", updateEntryTotalHint);
+[cardAmountEl, cashAmountEl, deliveryAmountEl, settlementDateEl].forEach((input) => input.addEventListener("input", updateEntryTotalHint));
+expenseDateEl.addEventListener("input", renderExpenseDayTotal);
+fixedMonthEl.addEventListener("input", () => {
+  renderFixedMonthTotal();
+  syncFixedInputs();
 });
-
-[expenseDateEl].forEach((input) => {
-  input.addEventListener("input", renderExpenseDayTotal);
-});
-
-[fixedMonthEl].forEach((input) => {
-  input.addEventListener("input", () => {
-    renderFixedMonthTotal();
-    syncFixedInputs();
-  });
-});
-
-[salaryAmountEl, rentAmountEl, insuranceAmountEl].forEach((input) => {
-  input.addEventListener("input", renderFixedMonthTotal);
-});
+[salaryAmountEl, rentAmountEl, insuranceAmountEl].forEach((input) => input.addEventListener("input", renderFixedMonthTotal));
 
 settlementForm.addEventListener("submit", (event) => {
   event.preventDefault();
-
   const card = safeAmount(cardAmountEl.value);
   const cash = safeAmount(cashAmountEl.value);
   const delivery = safeAmount(deliveryAmountEl.value);
-
   if (card === null || cash === null || delivery === null) {
     window.alert("금액은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
 
-  socket.emit("settlement:add", {
-    storeName: selectedStore,
-    date: settlementDateEl.value,
-    card,
-    cash,
-    delivery
-  });
-
+  socket.emit("settlement:add", { storeName: selectedStore, date: settlementDateEl.value, card, cash, delivery });
   settlementForm.reset();
   settlementDateEl.value = todayISO();
   updateEntryTotalHint();
@@ -608,7 +568,6 @@ settlementForm.addEventListener("submit", (event) => {
 expenseForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const amount = safeAmount(expenseAmountEl.value);
-
   if (amount === null) {
     window.alert("재료비 금액은 0 이상의 숫자로 입력해 주세요.");
     return;
@@ -620,7 +579,6 @@ expenseForm.addEventListener("submit", (event) => {
     amount,
     note: expenseNoteEl.value.trim()
   });
-
   expenseForm.reset();
   expenseDateEl.value = todayISO();
   renderExpenseDayTotal();
@@ -634,47 +592,32 @@ fixedMonthForm.addEventListener("submit", (event) => {
 
 salaryForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const value = safeAmount(salaryAmountEl.value);
-  if (value === null) {
+  const amount = safeAmount(salaryAmountEl.value);
+  if (amount === null) {
     window.alert("월급은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-  socket.emit("fixedCost:setItem", {
-    storeName: selectedStore,
-    month: fixedMonthEl.value,
-    item: "salary",
-    amount: value
-  });
+  socket.emit("fixedCost:setItem", { storeName: selectedStore, month: fixedMonthEl.value, item: "salary", amount });
 });
 
 rentForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const value = safeAmount(rentAmountEl.value);
-  if (value === null) {
+  const amount = safeAmount(rentAmountEl.value);
+  if (amount === null) {
     window.alert("월세는 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-  socket.emit("fixedCost:setItem", {
-    storeName: selectedStore,
-    month: fixedMonthEl.value,
-    item: "rent",
-    amount: value
-  });
+  socket.emit("fixedCost:setItem", { storeName: selectedStore, month: fixedMonthEl.value, item: "rent", amount });
 });
 
 insuranceForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const value = safeAmount(insuranceAmountEl.value);
-  if (value === null) {
+  const amount = safeAmount(insuranceAmountEl.value);
+  if (amount === null) {
     window.alert("보험비는 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-  socket.emit("fixedCost:setItem", {
-    storeName: selectedStore,
-    month: fixedMonthEl.value,
-    item: "insurance",
-    amount: value
-  });
+  socket.emit("fixedCost:setItem", { storeName: selectedStore, month: fixedMonthEl.value, item: "insurance", amount });
 });
 
 weekSelectEl.addEventListener("change", () => {
