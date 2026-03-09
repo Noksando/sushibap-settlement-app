@@ -35,6 +35,9 @@
       "card": 780,
       "cash": 120,
       "delivery": 210,
+      "materialCost": 320,
+      "laborCost": 210,
+      "fixedCost": 90,
       "createdAt": "2026-03-09T08:00:00.000Z"
     },
     {
@@ -44,6 +47,9 @@
       "card": 260,
       "cash": 90,
       "delivery": 110,
+      "materialCost": 150,
+      "laborCost": 110,
+      "fixedCost": 60,
       "createdAt": "2026-03-09T08:05:00.000Z"
     }
   ]

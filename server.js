@@ -54,6 +54,9 @@ const defaultData = {
       card: 780,
       cash: 120,
       delivery: 210,
+      materialCost: 320,
+      laborCost: 210,
+      fixedCost: 90,
       createdAt: "2026-03-09T08:00:00.000Z"
     },
     {
@@ -63,6 +66,9 @@ const defaultData = {
       card: 260,
       cash: 90,
       delivery: 110,
+      materialCost: 150,
+      laborCost: 110,
+      fixedCost: 60,
       createdAt: "2026-03-09T08:05:00.000Z"
     }
   ]
@@ -113,6 +119,12 @@ function normalizeState(rawData) {
         entry.delivery >= 0
       );
     })
+    .map((entry) => ({
+      ...entry,
+      materialCost: Number.isFinite(entry.materialCost) && entry.materialCost >= 0 ? entry.materialCost : 0,
+      laborCost: Number.isFinite(entry.laborCost) && entry.laborCost >= 0 ? entry.laborCost : 0,
+      fixedCost: Number.isFinite(entry.fixedCost) && entry.fixedCost >= 0 ? entry.fixedCost : 0
+    }))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   return next;
 }
@@ -283,7 +295,9 @@ io.on("connection", (socket) => {
     broadcastState();
   });
 
-  socket.on("settlement:add", ({ storeName, date, card, cash, delivery }) => {
+  socket.on(
+    "settlement:add",
+    ({ storeName, date, card, cash, delivery, materialCost = 0, laborCost = 0, fixedCost = 0 }) => {
     if (!FINANCE_STORES.includes(storeName) || typeof date !== "string" || !date) {
       return;
     }
@@ -291,9 +305,15 @@ io.on("connection", (socket) => {
       !Number.isFinite(card) ||
       !Number.isFinite(cash) ||
       !Number.isFinite(delivery) ||
+      !Number.isFinite(materialCost) ||
+      !Number.isFinite(laborCost) ||
+      !Number.isFinite(fixedCost) ||
       card < 0 ||
       cash < 0 ||
-      delivery < 0
+      delivery < 0 ||
+      materialCost < 0 ||
+      laborCost < 0 ||
+      fixedCost < 0
     ) {
       return;
     }
@@ -304,13 +324,17 @@ io.on("connection", (socket) => {
       card,
       cash,
       delivery,
+      materialCost,
+      laborCost,
+      fixedCost,
       createdAt: new Date().toISOString()
     });
     state.settlements = state.settlements
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     saveData(state);
     broadcastState();
-  });
+    }
+  );
 
   socket.on("settlement:remove", ({ id }) => {
     state.settlements = state.settlements.filter((entry) => entry.id !== id);

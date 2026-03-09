@@ -12,6 +12,9 @@ const settlementDateEl = document.getElementById("settlementDate");
 const cardAmountEl = document.getElementById("cardAmount");
 const cashAmountEl = document.getElementById("cashAmount");
 const deliveryAmountEl = document.getElementById("deliveryAmount");
+const materialCostEl = document.getElementById("materialCost");
+const laborCostEl = document.getElementById("laborCost");
+const fixedCostEl = document.getElementById("fixedCost");
 const entryTotalEl = document.getElementById("entryTotal");
 const settlementListEl = document.getElementById("settlementList");
 const weekSelectEl = document.getElementById("weekSelect");
@@ -108,6 +111,18 @@ function getSettlements() {
   return Array.isArray(currentState.settlements) ? currentState.settlements : [];
 }
 
+function salesTotal(entry) {
+  return (entry.card || 0) + (entry.cash || 0) + (entry.delivery || 0);
+}
+
+function costTotal(entry) {
+  return (entry.materialCost || 0) + (entry.laborCost || 0) + (entry.fixedCost || 0);
+}
+
+function netTotal(entry) {
+  return salesTotal(entry) - costTotal(entry);
+}
+
 function renderStoreTabs() {
   storeTabsEl.innerHTML = "";
   FINANCE_STORES.forEach((storeName) => {
@@ -134,18 +149,22 @@ function renderSettlementList() {
   }
 
   settlements.slice(0, 20).forEach((entry) => {
-    const total = entry.card + entry.cash + entry.delivery;
+    const total = salesTotal(entry);
+    const cost = costTotal(entry);
+    const net = netTotal(entry);
     const li = document.createElement("li");
     li.className = "settlement-item";
     li.innerHTML = `
       <div class="settlement-top">
         <strong>${formatDateKOR(entry.date)}</strong>
-        <span class="settlement-total">총 ${formatEUR(total)}</span>
+        <span class="settlement-total">순이익 ${formatEUR(net)}</span>
       </div>
       <div class="settlement-grid">
         <span>카드 ${formatEUR(entry.card)}</span>
         <span>현금 ${formatEUR(entry.cash)}</span>
         <span>배달 ${formatEUR(entry.delivery)}</span>
+        <span>매출 ${formatEUR(total)}</span>
+        <span>비용 ${formatEUR(cost)}</span>
       </div>
       <button class="delete-btn">삭제</button>
     `;
@@ -192,7 +211,7 @@ function renderWeekSelect() {
 function calcWeekSummary(weekStart) {
   const totalsByStore = {};
   FINANCE_STORES.forEach((store) => {
-    totalsByStore[store] = { card: 0, cash: 0, delivery: 0 };
+    totalsByStore[store] = { card: 0, cash: 0, delivery: 0, cost: 0 };
   });
 
   getSettlements().forEach((entry) => {
@@ -206,13 +225,15 @@ function calcWeekSummary(weekStart) {
     target.card += entry.card;
     target.cash += entry.cash;
     target.delivery += entry.delivery;
+    target.cost += costTotal(entry);
   });
 
-  const all = { card: 0, cash: 0, delivery: 0 };
+  const all = { card: 0, cash: 0, delivery: 0, cost: 0 };
   FINANCE_STORES.forEach((store) => {
     all.card += totalsByStore[store].card;
     all.cash += totalsByStore[store].cash;
     all.delivery += totalsByStore[store].delivery;
+    all.cost += totalsByStore[store].cost;
   });
 
   return { totalsByStore, all };
@@ -220,24 +241,29 @@ function calcWeekSummary(weekStart) {
 
 function renderWeeklySummary() {
   const { totalsByStore, all } = calcWeekSummary(selectedWeekStart);
+  const allSales = all.card + all.cash + all.delivery;
+  const allNet = allSales - all.cost;
 
   weeklyCardsEl.innerHTML = `
-    <div class="summary-pill">전체 카드 ${formatEUR(all.card)}</div>
-    <div class="summary-pill">전체 현금 ${formatEUR(all.cash)}</div>
-    <div class="summary-pill">전체 배달 ${formatEUR(all.delivery)}</div>
+    <div class="summary-pill">전체 매출 ${formatEUR(allSales)}</div>
+    <div class="summary-pill">전체 비용 ${formatEUR(all.cost)}</div>
+    <div class="summary-pill">전체 순이익 ${formatEUR(allNet)}</div>
   `;
 
   weeklyTableBodyEl.innerHTML = "";
 
   FINANCE_STORES.forEach((store) => {
     const data = totalsByStore[store];
+    const sales = data.card + data.cash + data.delivery;
+    const net = sales - data.cost;
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${store}</td>
       <td>${formatEUR(data.card)}</td>
       <td>${formatEUR(data.cash)}</td>
       <td>${formatEUR(data.delivery)}</td>
-      <td>${formatEUR(data.card + data.cash + data.delivery)}</td>
+      <td>${formatEUR(sales)}</td>
+      <td>${formatEUR(net)} <small>(비용 ${formatEUR(data.cost)})</small></td>
     `;
     weeklyTableBodyEl.appendChild(row);
   });
@@ -249,7 +275,8 @@ function renderWeeklySummary() {
     <td>${formatEUR(all.card)}</td>
     <td>${formatEUR(all.cash)}</td>
     <td>${formatEUR(all.delivery)}</td>
-    <td>${formatEUR(all.card + all.cash + all.delivery)}</td>
+    <td>${formatEUR(allSales)}</td>
+    <td>${formatEUR(allNet)} <small>(비용 ${formatEUR(all.cost)})</small></td>
   `;
   weeklyTableBodyEl.appendChild(allRow);
 }
@@ -354,11 +381,16 @@ function updateEntryTotalHint() {
   const card = Number(cardAmountEl.value) || 0;
   const cash = Number(cashAmountEl.value) || 0;
   const delivery = Number(deliveryAmountEl.value) || 0;
-  const total = card + cash + delivery;
-  entryTotalEl.textContent = `입력 합계: ${formatEUR(total)}`;
+  const materialCost = Number(materialCostEl.value) || 0;
+  const laborCost = Number(laborCostEl.value) || 0;
+  const fixedCost = Number(fixedCostEl.value) || 0;
+  const sales = card + cash + delivery;
+  const cost = materialCost + laborCost + fixedCost;
+  const net = sales - cost;
+  entryTotalEl.textContent = `입력 매출 ${formatEUR(sales)} | 비용 ${formatEUR(cost)} | 순이익 ${formatEUR(net)}`;
 }
 
-[cardAmountEl, cashAmountEl, deliveryAmountEl].forEach((input) => {
+[cardAmountEl, cashAmountEl, deliveryAmountEl, materialCostEl, laborCostEl, fixedCostEl].forEach((input) => {
   input.addEventListener("input", updateEntryTotalHint);
 });
 
@@ -368,8 +400,18 @@ settlementForm.addEventListener("submit", (event) => {
   const card = safeAmount(cardAmountEl.value);
   const cash = safeAmount(cashAmountEl.value);
   const delivery = safeAmount(deliveryAmountEl.value);
+  const materialCost = safeAmount(materialCostEl.value || 0);
+  const laborCost = safeAmount(laborCostEl.value || 0);
+  const fixedCost = safeAmount(fixedCostEl.value || 0);
 
-  if (card === null || cash === null || delivery === null) {
+  if (
+    card === null ||
+    cash === null ||
+    delivery === null ||
+    materialCost === null ||
+    laborCost === null ||
+    fixedCost === null
+  ) {
     window.alert("금액은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
@@ -379,7 +421,10 @@ settlementForm.addEventListener("submit", (event) => {
     date: settlementDateEl.value,
     card,
     cash,
-    delivery
+    delivery,
+    materialCost,
+    laborCost,
+    fixedCost
   });
 
   settlementForm.reset();
