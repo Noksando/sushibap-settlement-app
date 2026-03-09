@@ -11,6 +11,11 @@
   box-sizing: border-box;
 }
 
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -45,6 +50,7 @@ body {
   padding: 16px;
   margin-bottom: 14px;
   box-shadow: 0 10px 24px rgba(14, 122, 66, 0.08);
+  overflow-x: clip;
 }
 
 h2 {
@@ -101,10 +107,21 @@ select {
   min-width: 0;
   inline-size: 100%;
   min-inline-size: 0;
+  display: block;
+  overflow: hidden;
+  -webkit-appearance: none;
+  appearance: none;
+  text-overflow: ellipsis;
 }
 
 input[type="date"]::-webkit-datetime-edit,
 input[type="month"]::-webkit-datetime-edit {
+  padding: 0;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator {
+  margin: 0;
   padding: 0;
 }
 
