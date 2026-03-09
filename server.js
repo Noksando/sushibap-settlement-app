@@ -11,7 +11,6 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3001;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data", "store.json");
 const FINANCE_STORES = ["1호점", "2호점"];
-const EXPENSE_TYPES = ["labor", "fixed"];
 
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/healthz", (_req, res) => {
@@ -72,19 +71,20 @@ const defaultData = {
       id: "expense-1",
       storeName: "1호점",
       date: "2026-03-09",
-      type: "labor",
+      type: "daily",
       amount: 210,
-      note: "저녁 파트타임",
+      note: "연어/쌀 구입",
       createdAt: "2026-03-09T08:10:00.000Z"
-    },
+    }
+  ],
+  monthlyFixedCosts: [
     {
-      id: "expense-2",
+      id: "fixed-1",
       storeName: "2호점",
-      date: "2026-03-09",
-      type: "fixed",
-      amount: 60,
-      note: "전기/수도",
-      createdAt: "2026-03-09T08:12:00.000Z"
+      month: "2026-03",
+      salary: 1100,
+      rent: 600,
+      updatedAt: "2026-03-01T00:00:00.000Z"
     }
   ]
 };
@@ -108,6 +108,39 @@ function normalizeState(rawData) {
   }
   if (!Array.isArray(next.expenses)) {
     next.expenses = [];
+  }
+
+  if (!Array.isArray(next.dailyExpenses)) {
+    next.dailyExpenses = next.expenses.filter((entry) => !entry?.type || entry.type === "daily");
+  }
+
+  if (!Array.isArray(next.monthlyFixedCosts)) {
+    const fixedMap = new Map();
+    next.expenses
+      .filter((entry) => entry?.type === "labor" || entry?.type === "fixed")
+      .forEach((entry) => {
+        if (!FINANCE_STORES.includes(entry.storeName) || typeof entry.date !== "string") {
+          return;
+        }
+        const month = entry.date.slice(0, 7);
+        const key = `${entry.storeName}:${month}`;
+        const prev = fixedMap.get(key) || {
+          id: `fixed-${Date.now()}-${Math.random()}`,
+          storeName: entry.storeName,
+          month,
+          salary: 0,
+          rent: 0,
+          updatedAt: entry.createdAt || new Date().toISOString()
+        };
+        if (entry.type === "labor") {
+          prev.salary += Number(entry.amount) || 0;
+        }
+        if (entry.type === "fixed") {
+          prev.rent += Number(entry.amount) || 0;
+        }
+        fixedMap.set(key, prev);
+      });
+    next.monthlyFixedCosts = [...fixedMap.values()];
   }
   next.paidBills = next.paidBills
     .filter((bill) => bill && typeof bill === "object")
@@ -138,15 +171,12 @@ function normalizeState(rawData) {
       );
     })
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  next.expenses = next.expenses
+  next.dailyExpenses = next.dailyExpenses
     .filter((entry) => {
       if (!entry || typeof entry !== "object") {
         return false;
       }
       if (!FINANCE_STORES.includes(entry.storeName)) {
-        return false;
-      }
-      if (!EXPENSE_TYPES.includes(entry.type)) {
         return false;
       }
       if (typeof entry.date !== "string" || !entry.date) {
@@ -156,9 +186,31 @@ function normalizeState(rawData) {
     })
     .map((entry) => ({
       ...entry,
+      type: "daily",
       note: typeof entry.note === "string" ? entry.note.slice(0, 120) : ""
     }))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+  next.monthlyFixedCosts = next.monthlyFixedCosts
+    .filter((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return false;
+      }
+      if (!FINANCE_STORES.includes(entry.storeName)) {
+        return false;
+      }
+      if (typeof entry.month !== "string" || !/^\d{4}-\d{2}$/.test(entry.month)) {
+        return false;
+      }
+      return (
+        Number.isFinite(entry.salary) &&
+        entry.salary >= 0 &&
+        Number.isFinite(entry.rent) &&
+        entry.rent >= 0
+      );
+    })
+    .sort((a, b) => String(b.month || "").localeCompare(String(a.month || "")));
+
   return next;
 }
 
@@ -363,24 +415,24 @@ io.on("connection", (socket) => {
     broadcastState();
   });
 
-  socket.on("expense:add", ({ storeName, date, type, amount, note }) => {
+  socket.on("expense:add", ({ storeName, date, amount, note }) => {
     if (!FINANCE_STORES.includes(storeName) || typeof date !== "string" || !date) {
       return;
     }
-    if (!EXPENSE_TYPES.includes(type) || !Number.isFinite(amount) || amount < 0) {
+    if (!Number.isFinite(amount) || amount < 0) {
       return;
     }
     const normalizedNote = typeof note === "string" ? note.trim().slice(0, 120) : "";
-    state.expenses.unshift({
+    state.dailyExpenses.unshift({
       id: `expense-${Date.now()}`,
       storeName,
       date,
-      type,
+      type: "daily",
       amount,
       note: normalizedNote,
       createdAt: new Date().toISOString()
     });
-    state.expenses = state.expenses
+    state.dailyExpenses = state.dailyExpenses
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
       .slice(0, 300);
     saveData(state);
@@ -388,7 +440,44 @@ io.on("connection", (socket) => {
   });
 
   socket.on("expense:remove", ({ id }) => {
-    state.expenses = state.expenses.filter((entry) => entry.id !== id);
+    state.dailyExpenses = state.dailyExpenses.filter((entry) => entry.id !== id);
+    saveData(state);
+    broadcastState();
+  });
+
+  socket.on("fixedCost:set", ({ storeName, month, salary, rent }) => {
+    if (!FINANCE_STORES.includes(storeName) || typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
+      return;
+    }
+    if (!Number.isFinite(salary) || !Number.isFinite(rent) || salary < 0 || rent < 0) {
+      return;
+    }
+    const existing = state.monthlyFixedCosts.find(
+      (entry) => entry.storeName === storeName && entry.month === month
+    );
+    if (existing) {
+      existing.salary = salary;
+      existing.rent = rent;
+      existing.updatedAt = new Date().toISOString();
+    } else {
+      state.monthlyFixedCosts.unshift({
+        id: `fixed-${Date.now()}`,
+        storeName,
+        month,
+        salary,
+        rent,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    state.monthlyFixedCosts = state.monthlyFixedCosts
+      .sort((a, b) => String(b.month || "").localeCompare(String(a.month || "")))
+      .slice(0, 120);
+    saveData(state);
+    broadcastState();
+  });
+
+  socket.on("fixedCost:remove", ({ id }) => {
+    state.monthlyFixedCosts = state.monthlyFixedCosts.filter((entry) => entry.id !== id);
     saveData(state);
     broadcastState();
   });

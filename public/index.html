@@ -28,19 +28,27 @@
       </section>
 
       <section class="card">
-        <h2>지출 노트 (인건비/고정비)</h2>
+        <h2>일일 지출 노트 (재료비)</h2>
         <form id="expenseForm" class="row-form expense-form">
           <input id="expenseDate" type="date" required />
-          <select id="expenseType" required>
-            <option value="labor">인건비</option>
-            <option value="fixed">고정비</option>
-          </select>
-          <input id="expenseAmount" type="number" min="0" step="0.01" placeholder="지출 금액 (EUR)" required />
-          <input id="expenseNote" type="text" maxlength="120" placeholder="메모 (선택)" />
-          <button type="submit">지출 저장</button>
+          <input id="expenseAmount" type="number" min="0" step="0.01" placeholder="재료비 지출 (EUR)" required />
+          <input id="expenseNote" type="text" maxlength="120" placeholder="메모 (예: 연어/쌀 구입)" />
+          <button type="submit">재료비 저장</button>
         </form>
         <p id="expenseDayTotal" class="entry-total"></p>
         <ul id="expenseList" class="expense-list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>월 고정비 (월급 + 월세)</h2>
+        <form id="fixedCostForm" class="row-form fixed-cost-form">
+          <input id="fixedMonth" type="month" required />
+          <input id="salaryAmount" type="number" min="0" step="0.01" placeholder="월급 합계 (EUR)" required />
+          <input id="rentAmount" type="number" min="0" step="0.01" placeholder="월세 (EUR)" required />
+          <button type="submit">월 고정비 저장</button>
+        </form>
+        <p id="fixedMonthTotal" class="entry-total"></p>
+        <ul id="fixedCostList" class="expense-list"></ul>
       </section>
 
       <section class="card">

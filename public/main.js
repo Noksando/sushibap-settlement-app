@@ -1,10 +1,6 @@
 const socket = io();
 
 const FINANCE_STORES = ["1호점", "2호점"];
-const EXPENSE_LABELS = {
-  labor: "인건비",
-  fixed: "고정비"
-};
 const TARGET_BY_STORE = {
   "1호점": 1000,
   "2호점": 500
@@ -21,11 +17,17 @@ const settlementListEl = document.getElementById("settlementList");
 
 const expenseForm = document.getElementById("expenseForm");
 const expenseDateEl = document.getElementById("expenseDate");
-const expenseTypeEl = document.getElementById("expenseType");
 const expenseAmountEl = document.getElementById("expenseAmount");
 const expenseNoteEl = document.getElementById("expenseNote");
 const expenseDayTotalEl = document.getElementById("expenseDayTotal");
 const expenseListEl = document.getElementById("expenseList");
+
+const fixedCostForm = document.getElementById("fixedCostForm");
+const fixedMonthEl = document.getElementById("fixedMonth");
+const salaryAmountEl = document.getElementById("salaryAmount");
+const rentAmountEl = document.getElementById("rentAmount");
+const fixedMonthTotalEl = document.getElementById("fixedMonthTotal");
+const fixedCostListEl = document.getElementById("fixedCostList");
 
 const weekSelectEl = document.getElementById("weekSelect");
 const weeklyCardsEl = document.getElementById("weeklyCards");
@@ -33,7 +35,7 @@ const weeklyTableBodyEl = document.getElementById("weeklyTableBody");
 const monthPickerEl = document.getElementById("monthPicker");
 const contributionWrapEl = document.getElementById("contributionWrap");
 
-let currentState = { settlements: [], expenses: [] };
+let currentState = { settlements: [], dailyExpenses: [], monthlyFixedCosts: [] };
 let selectedStore = FINANCE_STORES[0];
 let selectedWeekStart = "";
 let selectedMonth = "";
@@ -109,6 +111,10 @@ function addDaysISO(dateStr, days) {
   return `${y}-${m}-${d}`;
 }
 
+function daysInMonth(year, monthIndex) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
 function safeAmount(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -121,18 +127,42 @@ function getSettlements() {
   return Array.isArray(currentState.settlements) ? currentState.settlements : [];
 }
 
-function getExpenses() {
-  return Array.isArray(currentState.expenses) ? currentState.expenses : [];
+function getDailyExpenses() {
+  return Array.isArray(currentState.dailyExpenses) ? currentState.dailyExpenses : [];
+}
+
+function getMonthlyFixedCosts() {
+  return Array.isArray(currentState.monthlyFixedCosts) ? currentState.monthlyFixedCosts : [];
+}
+
+function getFixedByMonth(storeName, month) {
+  return (
+    getMonthlyFixedCosts().find((entry) => entry.storeName === storeName && entry.month === month) || {
+      salary: 0,
+      rent: 0
+    }
+  );
 }
 
 function salesTotal(entry) {
   return (entry.card || 0) + (entry.cash || 0) + (entry.delivery || 0);
 }
 
-function expenseForDate(storeName, date) {
-  return getExpenses()
-    .filter((item) => item.storeName === storeName && item.date === date)
-    .reduce((sum, item) => sum + item.amount, 0);
+function dailyExpenseForDate(storeName, date) {
+  return getDailyExpenses()
+    .filter((entry) => entry.storeName === storeName && entry.date === date)
+    .reduce((sum, entry) => sum + entry.amount, 0);
+}
+
+function fixedPerDay(storeName, date) {
+  const month = String(date).slice(0, 7);
+  const fixed = getFixedByMonth(storeName, month);
+  const [year, monthNum] = month.split("-").map(Number);
+  if (!year || !monthNum) {
+    return 0;
+  }
+  const perMonth = (fixed.salary || 0) + (fixed.rent || 0);
+  return perMonth / daysInMonth(year, monthNum - 1);
 }
 
 function renderStoreTabs() {
@@ -147,8 +177,10 @@ function renderStoreTabs() {
       renderStoreTabs();
       renderSettlementList();
       renderExpenseList();
+      renderFixedCostList();
       updateEntryTotalHint();
       renderExpenseDayTotal();
+      renderFixedMonthTotal();
     });
     storeTabsEl.appendChild(btn);
   });
@@ -165,8 +197,9 @@ function renderSettlementList() {
 
   settlements.slice(0, 20).forEach((entry) => {
     const sales = salesTotal(entry);
-    const cost = expenseForDate(entry.storeName, entry.date);
-    const net = sales - cost;
+    const dailyExpense = dailyExpenseForDate(entry.storeName, entry.date);
+    const fixedDaily = fixedPerDay(entry.storeName, entry.date);
+    const net = sales - dailyExpense - fixedDaily;
     const li = document.createElement("li");
     li.className = "settlement-item";
     li.innerHTML = `
@@ -179,7 +212,8 @@ function renderSettlementList() {
         <span>현금 ${formatEUR(entry.cash)}</span>
         <span>배달 ${formatEUR(entry.delivery)}</span>
         <span>매출 ${formatEUR(sales)}</span>
-        <span>지출 ${formatEUR(cost)}</span>
+        <span>재료비 ${formatEUR(dailyExpense)}</span>
+        <span>고정비(일할) ${formatEUR(fixedDaily)}</span>
       </div>
       <button class="delete-btn">삭제</button>
     `;
@@ -195,11 +229,11 @@ function renderSettlementList() {
 }
 
 function renderExpenseList() {
-  const expenses = getExpenses().filter((entry) => entry.storeName === selectedStore);
+  const expenses = getDailyExpenses().filter((entry) => entry.storeName === selectedStore);
   expenseListEl.innerHTML = "";
 
   if (expenses.length === 0) {
-    expenseListEl.innerHTML = "<li>아직 등록된 지출 노트가 없습니다.</li>";
+    expenseListEl.innerHTML = "<li>아직 등록된 재료비 지출이 없습니다.</li>";
     return;
   }
 
@@ -209,7 +243,7 @@ function renderExpenseList() {
     li.innerHTML = `
       <div class="settlement-top">
         <strong>${formatDateKOR(entry.date)}</strong>
-        <span class="settlement-total">${EXPENSE_LABELS[entry.type] || entry.type} ${formatEUR(entry.amount)}</span>
+        <span class="settlement-total">${formatEUR(entry.amount)}</span>
       </div>
       <div class="settlement-grid">
         <span>${entry.note || "메모 없음"}</span>
@@ -217,13 +251,48 @@ function renderExpenseList() {
       <button class="delete-btn">삭제</button>
     `;
     li.querySelector(".delete-btn").addEventListener("click", () => {
-      const ok = window.confirm("이 지출 노트를 삭제할까요?");
+      const ok = window.confirm("이 재료비 지출을 삭제할까요?");
       if (!ok) {
         return;
       }
       socket.emit("expense:remove", { id: entry.id });
     });
     expenseListEl.appendChild(li);
+  });
+}
+
+function renderFixedCostList() {
+  const fixedCosts = getMonthlyFixedCosts().filter((entry) => entry.storeName === selectedStore);
+  fixedCostListEl.innerHTML = "";
+
+  if (fixedCosts.length === 0) {
+    fixedCostListEl.innerHTML = "<li>아직 등록된 월 고정비가 없습니다.</li>";
+    return;
+  }
+
+  fixedCosts.slice(0, 12).forEach((entry) => {
+    const total = (entry.salary || 0) + (entry.rent || 0);
+    const li = document.createElement("li");
+    li.className = "expense-item";
+    li.innerHTML = `
+      <div class="settlement-top">
+        <strong>${entry.month}</strong>
+        <span class="settlement-total">총 ${formatEUR(total)}</span>
+      </div>
+      <div class="settlement-grid">
+        <span>월급 ${formatEUR(entry.salary)}</span>
+        <span>월세 ${formatEUR(entry.rent)}</span>
+      </div>
+      <button class="delete-btn">삭제</button>
+    `;
+    li.querySelector(".delete-btn").addEventListener("click", () => {
+      const ok = window.confirm("이 월 고정비를 삭제할까요?");
+      if (!ok) {
+        return;
+      }
+      socket.emit("fixedCost:remove", { id: entry.id });
+    });
+    fixedCostListEl.appendChild(li);
   });
 }
 
@@ -235,7 +304,7 @@ function weekOptions() {
       starts.add(start);
     }
   });
-  getExpenses().forEach((entry) => {
+  getDailyExpenses().forEach((entry) => {
     const start = toWeekStartISO(entry.date);
     if (start) {
       starts.add(start);
@@ -265,7 +334,7 @@ function renderWeekSelect() {
 function calcWeekSummary(weekStart) {
   const totalsByStore = {};
   FINANCE_STORES.forEach((store) => {
-    totalsByStore[store] = { card: 0, cash: 0, delivery: 0, cost: 0 };
+    totalsByStore[store] = { card: 0, cash: 0, delivery: 0, dailyExpense: 0, fixedCost: 0 };
   });
 
   getSettlements().forEach((entry) => {
@@ -281,7 +350,7 @@ function calcWeekSummary(weekStart) {
     target.delivery += entry.delivery;
   });
 
-  getExpenses().forEach((entry) => {
+  getDailyExpenses().forEach((entry) => {
     if (toWeekStartISO(entry.date) !== weekStart) {
       return;
     }
@@ -289,15 +358,23 @@ function calcWeekSummary(weekStart) {
     if (!target) {
       return;
     }
-    target.cost += entry.amount;
+    target.dailyExpense += entry.amount;
   });
 
-  const all = { card: 0, cash: 0, delivery: 0, cost: 0 };
+  FINANCE_STORES.forEach((store) => {
+    for (let offset = 0; offset < 7; offset += 1) {
+      const day = addDaysISO(weekStart, offset);
+      totalsByStore[store].fixedCost += fixedPerDay(store, day);
+    }
+  });
+
+  const all = { card: 0, cash: 0, delivery: 0, dailyExpense: 0, fixedCost: 0 };
   FINANCE_STORES.forEach((store) => {
     all.card += totalsByStore[store].card;
     all.cash += totalsByStore[store].cash;
     all.delivery += totalsByStore[store].delivery;
-    all.cost += totalsByStore[store].cost;
+    all.dailyExpense += totalsByStore[store].dailyExpense;
+    all.fixedCost += totalsByStore[store].fixedCost;
   });
 
   return { totalsByStore, all };
@@ -306,11 +383,13 @@ function calcWeekSummary(weekStart) {
 function renderWeeklySummary() {
   const { totalsByStore, all } = calcWeekSummary(selectedWeekStart);
   const allSales = all.card + all.cash + all.delivery;
-  const allNet = allSales - all.cost;
+  const allCost = all.dailyExpense + all.fixedCost;
+  const allNet = allSales - allCost;
 
   weeklyCardsEl.innerHTML = `
     <div class="summary-pill">전체 매출 ${formatEUR(allSales)}</div>
-    <div class="summary-pill">전체 지출 ${formatEUR(all.cost)}</div>
+    <div class="summary-pill">재료비 ${formatEUR(all.dailyExpense)}</div>
+    <div class="summary-pill">고정비(일할) ${formatEUR(all.fixedCost)}</div>
     <div class="summary-pill">전체 순이익 ${formatEUR(allNet)}</div>
   `;
 
@@ -319,7 +398,8 @@ function renderWeeklySummary() {
   FINANCE_STORES.forEach((store) => {
     const data = totalsByStore[store];
     const sales = data.card + data.cash + data.delivery;
-    const net = sales - data.cost;
+    const cost = data.dailyExpense + data.fixedCost;
+    const net = sales - cost;
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${store}</td>
@@ -327,7 +407,7 @@ function renderWeeklySummary() {
       <td>${formatEUR(data.cash)}</td>
       <td>${formatEUR(data.delivery)}</td>
       <td>${formatEUR(sales)}</td>
-      <td>${formatEUR(net)} <small>(지출 ${formatEUR(data.cost)})</small></td>
+      <td>${formatEUR(net)} <small>(재료 ${formatEUR(data.dailyExpense)} + 고정 ${formatEUR(data.fixedCost)})</small></td>
     `;
     weeklyTableBodyEl.appendChild(row);
   });
@@ -340,7 +420,7 @@ function renderWeeklySummary() {
     <td>${formatEUR(all.cash)}</td>
     <td>${formatEUR(all.delivery)}</td>
     <td>${formatEUR(allSales)}</td>
-    <td>${formatEUR(allNet)} <small>(지출 ${formatEUR(all.cost)})</small></td>
+    <td>${formatEUR(allNet)} <small>(재료 ${formatEUR(all.dailyExpense)} + 고정 ${formatEUR(all.fixedCost)})</small></td>
   `;
   weeklyTableBodyEl.appendChild(allRow);
 }
@@ -360,10 +440,6 @@ function getShadeClass(amount, target) {
     return "shade-2";
   }
   return "shade-1";
-}
-
-function daysInMonth(year, monthIndex) {
-  return new Date(year, monthIndex + 1, 0).getDate();
 }
 
 function monthTotalsByStore(monthStr) {
@@ -443,8 +519,17 @@ function renderContributionGraph() {
 
 function renderExpenseDayTotal() {
   const date = expenseDateEl.value || todayISO();
-  const cost = expenseForDate(selectedStore, date);
-  expenseDayTotalEl.textContent = `${selectedStore} ${formatDateKOR(date)} 지출 합계: ${formatEUR(cost)}`;
+  const cost = dailyExpenseForDate(selectedStore, date);
+  expenseDayTotalEl.textContent = `${selectedStore} ${formatDateKOR(date)} 재료비 합계: ${formatEUR(cost)}`;
+}
+
+function renderFixedMonthTotal() {
+  const month = fixedMonthEl.value || monthISO();
+  const fixed = getFixedByMonth(selectedStore, month);
+  const total = (fixed.salary || 0) + (fixed.rent || 0);
+  fixedMonthTotalEl.textContent = `${selectedStore} ${month} 고정비: 월급 ${formatEUR(
+    fixed.salary || 0
+  )} + 월세 ${formatEUR(fixed.rent || 0)} = ${formatEUR(total)}`;
 }
 
 function updateEntryTotalHint() {
@@ -453,17 +538,24 @@ function updateEntryTotalHint() {
   const delivery = Number(deliveryAmountEl.value) || 0;
   const sales = card + cash + delivery;
   const date = settlementDateEl.value || todayISO();
-  const cost = expenseForDate(selectedStore, date);
-  const net = sales - cost;
-  entryTotalEl.textContent = `입력 매출 ${formatEUR(sales)} | 해당일 지출 ${formatEUR(cost)} | 예상 순이익 ${formatEUR(net)}`;
+  const dailyExpense = dailyExpenseForDate(selectedStore, date);
+  const fixedDaily = fixedPerDay(selectedStore, date);
+  const net = sales - dailyExpense - fixedDaily;
+  entryTotalEl.textContent = `입력 매출 ${formatEUR(sales)} | 재료비 ${formatEUR(
+    dailyExpense
+  )} | 고정비(일할) ${formatEUR(fixedDaily)} | 예상 순이익 ${formatEUR(net)}`;
 }
 
 [cardAmountEl, cashAmountEl, deliveryAmountEl, settlementDateEl].forEach((input) => {
   input.addEventListener("input", updateEntryTotalHint);
 });
 
-[expenseDateEl, expenseAmountEl].forEach((input) => {
+[expenseDateEl].forEach((input) => {
   input.addEventListener("input", renderExpenseDayTotal);
+});
+
+[fixedMonthEl, salaryAmountEl, rentAmountEl].forEach((input) => {
+  input.addEventListener("input", renderFixedMonthTotal);
 });
 
 settlementForm.addEventListener("submit", (event) => {
@@ -496,22 +588,42 @@ expenseForm.addEventListener("submit", (event) => {
   const amount = safeAmount(expenseAmountEl.value);
 
   if (amount === null) {
-    window.alert("지출 금액은 0 이상의 숫자로 입력해 주세요.");
+    window.alert("재료비 금액은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
 
   socket.emit("expense:add", {
     storeName: selectedStore,
     date: expenseDateEl.value,
-    type: expenseTypeEl.value,
     amount,
     note: expenseNoteEl.value.trim()
   });
 
   expenseForm.reset();
   expenseDateEl.value = todayISO();
-  expenseTypeEl.value = "labor";
   renderExpenseDayTotal();
+});
+
+fixedCostForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const salary = safeAmount(salaryAmountEl.value);
+  const rent = safeAmount(rentAmountEl.value);
+
+  if (salary === null || rent === null) {
+    window.alert("월급/월세는 0 이상의 숫자로 입력해 주세요.");
+    return;
+  }
+
+  socket.emit("fixedCost:set", {
+    storeName: selectedStore,
+    month: fixedMonthEl.value,
+    salary,
+    rent
+  });
+
+  fixedCostForm.reset();
+  fixedMonthEl.value = monthISO();
+  renderFixedMonthTotal();
 });
 
 weekSelectEl.addEventListener("change", () => {
@@ -535,17 +647,20 @@ socket.on("state:update", (state) => {
   renderStoreTabs();
   renderSettlementList();
   renderExpenseList();
+  renderFixedCostList();
   renderWeekSelect();
   renderWeeklySummary();
   renderContributionGraph();
   updateEntryTotalHint();
   renderExpenseDayTotal();
+  renderFixedMonthTotal();
 });
 
 settlementDateEl.value = todayISO();
 expenseDateEl.value = todayISO();
-expenseTypeEl.value = "labor";
+fixedMonthEl.value = monthISO();
 selectedMonth = monthISO();
 monthPickerEl.value = selectedMonth;
 updateEntryTotalHint();
 renderExpenseDayTotal();
+renderFixedMonthTotal();

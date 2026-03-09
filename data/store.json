@@ -47,24 +47,25 @@
       "createdAt": "2026-03-09T08:05:00.000Z"
     }
   ],
-  "expenses": [
+  "dailyExpenses": [
     {
       "id": "expense-1",
       "storeName": "1호점",
       "date": "2026-03-09",
-      "type": "labor",
+      "type": "daily",
       "amount": 210,
-      "note": "저녁 파트타임",
+      "note": "연어/쌀 구입",
       "createdAt": "2026-03-09T08:10:00.000Z"
-    },
+    }
+  ],
+  "monthlyFixedCosts": [
     {
-      "id": "expense-2",
+      "id": "fixed-1",
       "storeName": "2호점",
-      "date": "2026-03-09",
-      "type": "fixed",
-      "amount": 60,
-      "note": "전기/수도",
-      "createdAt": "2026-03-09T08:12:00.000Z"
+      "month": "2026-03",
+      "salary": 1100,
+      "rent": 600,
+      "updatedAt": "2026-03-01T00:00:00.000Z"
     }
   ]
 }
