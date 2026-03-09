@@ -43,6 +43,35 @@ body {
   color: var(--sub);
 }
 
+.auth-card h2 {
+  margin-bottom: 4px;
+}
+
+.auth-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.auth-status {
+  margin: 0;
+  color: #14532d;
+  font-weight: 600;
+}
+
+.pin-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pin-form input {
+  width: 140px;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -230,6 +259,13 @@ button {
   background: #4b5563;
 }
 
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .summary-head {
   display: flex;
   justify-content: space-between;
@@ -388,6 +424,10 @@ td small {
   .summary-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .pin-form {
+    width: 100%;
   }
 
 }

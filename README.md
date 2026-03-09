@@ -5,7 +5,7 @@
 ## Run
 
 ```bash
-cd /Users/baek/Documents/Playground/settlement-app
+cd /Users/baek/Documents/Playground/sushibap-settlement-app
 npm install
 npm run dev
 ```
@@ -15,7 +15,8 @@ npm run dev
 
 ## Data Persistence
 
-- 기본 저장 파일: `/Users/baek/Documents/Playground/settlement-app/data/store.json`
+- 기본 저장 파일: `/Users/baek/Documents/Playground/sushibap-settlement-app/data/store.json`
+- 앱 시작 PIN: `1012` (최초 입장 시 입력)
 - 인벤토리 앱과 동일하게 프로젝트 내부 JSON 파일에 저장됩니다.
 - 커스텀 경로를 쓰려면 `DATA_FILE` 환경변수를 지정하면 됩니다.
 

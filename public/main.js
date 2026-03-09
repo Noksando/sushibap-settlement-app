@@ -37,11 +37,17 @@ const weeklyCardsEl = document.getElementById("weeklyCards");
 const weeklyTableBodyEl = document.getElementById("weeklyTableBody");
 const monthPickerEl = document.getElementById("monthPicker");
 const contributionWrapEl = document.getElementById("contributionWrap");
+const authCardEl = document.querySelector(".auth-card");
+const pinForm = document.getElementById("pinForm");
+const pinInput = document.getElementById("pinInput");
+const protectedSections = document.querySelectorAll(".protected-section");
 
 let currentState = { settlements: [], dailyExpenses: [], monthlyFixedCosts: [] };
 let selectedStore = FINANCE_STORES[0];
 let selectedWeekStart = "";
 let selectedMonth = "";
+let isUnlocked = false;
+const APP_PIN = "1012";
 
 function todayISO() {
   const now = new Date();
@@ -124,6 +130,13 @@ function safeAmount(value) {
     return null;
   }
   return parsed;
+}
+
+function syncAuthUI() {
+  protectedSections.forEach((section) => {
+    section.hidden = !isUnlocked;
+  });
+  authCardEl.hidden = isUnlocked;
 }
 
 function getSettlements() {
@@ -222,7 +235,8 @@ function renderSettlementList() {
       </div>
       <button class="delete-btn">삭제</button>
     `;
-    li.querySelector(".delete-btn").addEventListener("click", () => {
+    const deleteBtn = li.querySelector(".delete-btn");
+    deleteBtn.addEventListener("click", () => {
       if (!window.confirm("이 정산 기록을 삭제할까요?")) {
         return;
       }
@@ -254,7 +268,8 @@ function renderExpenseList() {
       </div>
       <button class="delete-btn">삭제</button>
     `;
-    li.querySelector(".delete-btn").addEventListener("click", () => {
+    const deleteBtn = li.querySelector(".delete-btn");
+    deleteBtn.addEventListener("click", () => {
       if (!window.confirm("이 재료비 지출을 삭제할까요?")) {
         return;
       }
@@ -289,7 +304,8 @@ function renderFixedCostList() {
       </div>
       <button class="delete-btn">삭제</button>
     `;
-    li.querySelector(".delete-btn").addEventListener("click", () => {
+    const deleteBtn = li.querySelector(".delete-btn");
+    deleteBtn.addEventListener("click", () => {
       if (!window.confirm("이 월 고정비를 삭제할까요?")) {
         return;
       }
@@ -536,6 +552,23 @@ fixedMonthEl.addEventListener("input", () => {
 });
 [salaryAmountEl, rentAmountEl, insuranceAmountEl].forEach((input) => input.addEventListener("input", renderFixedMonthTotal));
 
+pinForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const pin = pinInput.value.trim();
+  if (!pin) {
+    window.alert("PIN을 입력해 주세요.");
+    return;
+  }
+  if (pin !== APP_PIN) {
+    window.alert("PIN이 올바르지 않습니다.");
+    pinInput.value = "";
+    pinInput.focus();
+    return;
+  }
+  isUnlocked = true;
+  syncAuthUI();
+});
+
 settlementForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const card = safeAmount(cardAmountEl.value);
@@ -632,6 +665,7 @@ socket.on("state:update", (state) => {
   updateEntryTotalHint();
   renderExpenseDayTotal();
   renderFixedMonthTotal();
+  syncAuthUI();
 });
 
 settlementDateEl.value = todayISO();
@@ -642,3 +676,4 @@ monthPickerEl.value = selectedMonth;
 updateEntryTotalHint();
 renderExpenseDayTotal();
 renderFixedMonthTotal();
+syncAuthUI();
