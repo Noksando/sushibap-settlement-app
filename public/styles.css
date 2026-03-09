@@ -79,6 +79,10 @@ h2 {
   gap: 8px;
 }
 
+.row-form > * {
+  min-width: 0;
+}
+
 input,
 button,
 select {
@@ -95,6 +99,13 @@ select {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit {
+  padding: 0;
 }
 
 button {
@@ -156,6 +167,10 @@ button {
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.summary-head > * {
+  min-width: 0;
 }
 
 .weekly-cards {
@@ -309,5 +324,11 @@ td:first-child {
 
   .contribution-wrap {
     grid-template-columns: 1fr;
+  }
+
+  .row-form input[type="date"],
+  .summary-head input[type="month"] {
+    font-size: 13px;
+    letter-spacing: -0.1px;
   }
 }
