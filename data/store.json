@@ -35,9 +35,6 @@
       "card": 780,
       "cash": 120,
       "delivery": 210,
-      "materialCost": 320,
-      "laborCost": 210,
-      "fixedCost": 90,
       "createdAt": "2026-03-09T08:00:00.000Z"
     },
     {
@@ -47,10 +44,27 @@
       "card": 260,
       "cash": 90,
       "delivery": 110,
-      "materialCost": 150,
-      "laborCost": 110,
-      "fixedCost": 60,
       "createdAt": "2026-03-09T08:05:00.000Z"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "expense-1",
+      "storeName": "1호점",
+      "date": "2026-03-09",
+      "type": "labor",
+      "amount": 210,
+      "note": "저녁 파트타임",
+      "createdAt": "2026-03-09T08:10:00.000Z"
+    },
+    {
+      "id": "expense-2",
+      "storeName": "2호점",
+      "date": "2026-03-09",
+      "type": "fixed",
+      "amount": 60,
+      "note": "전기/수도",
+      "createdAt": "2026-03-09T08:12:00.000Z"
     }
   ]
 }

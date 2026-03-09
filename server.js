@@ -11,6 +11,7 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3001;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data", "store.json");
 const FINANCE_STORES = ["1호점", "2호점"];
+const EXPENSE_TYPES = ["labor", "fixed"];
 
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/healthz", (_req, res) => {
@@ -54,9 +55,6 @@ const defaultData = {
       card: 780,
       cash: 120,
       delivery: 210,
-      materialCost: 320,
-      laborCost: 210,
-      fixedCost: 90,
       createdAt: "2026-03-09T08:00:00.000Z"
     },
     {
@@ -66,10 +64,27 @@ const defaultData = {
       card: 260,
       cash: 90,
       delivery: 110,
-      materialCost: 150,
-      laborCost: 110,
-      fixedCost: 60,
       createdAt: "2026-03-09T08:05:00.000Z"
+    }
+  ],
+  expenses: [
+    {
+      id: "expense-1",
+      storeName: "1호점",
+      date: "2026-03-09",
+      type: "labor",
+      amount: 210,
+      note: "저녁 파트타임",
+      createdAt: "2026-03-09T08:10:00.000Z"
+    },
+    {
+      id: "expense-2",
+      storeName: "2호점",
+      date: "2026-03-09",
+      type: "fixed",
+      amount: 60,
+      note: "전기/수도",
+      createdAt: "2026-03-09T08:12:00.000Z"
     }
   ]
 };
@@ -90,6 +105,9 @@ function normalizeState(rawData) {
   }
   if (!Array.isArray(next.settlements)) {
     next.settlements = [];
+  }
+  if (!Array.isArray(next.expenses)) {
+    next.expenses = [];
   }
   next.paidBills = next.paidBills
     .filter((bill) => bill && typeof bill === "object")
@@ -119,11 +137,26 @@ function normalizeState(rawData) {
         entry.delivery >= 0
       );
     })
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  next.expenses = next.expenses
+    .filter((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return false;
+      }
+      if (!FINANCE_STORES.includes(entry.storeName)) {
+        return false;
+      }
+      if (!EXPENSE_TYPES.includes(entry.type)) {
+        return false;
+      }
+      if (typeof entry.date !== "string" || !entry.date) {
+        return false;
+      }
+      return Number.isFinite(entry.amount) && entry.amount >= 0;
+    })
     .map((entry) => ({
       ...entry,
-      materialCost: Number.isFinite(entry.materialCost) && entry.materialCost >= 0 ? entry.materialCost : 0,
-      laborCost: Number.isFinite(entry.laborCost) && entry.laborCost >= 0 ? entry.laborCost : 0,
-      fixedCost: Number.isFinite(entry.fixedCost) && entry.fixedCost >= 0 ? entry.fixedCost : 0
+      note: typeof entry.note === "string" ? entry.note.slice(0, 120) : ""
     }))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   return next;
@@ -295,9 +328,7 @@ io.on("connection", (socket) => {
     broadcastState();
   });
 
-  socket.on(
-    "settlement:add",
-    ({ storeName, date, card, cash, delivery, materialCost = 0, laborCost = 0, fixedCost = 0 }) => {
+  socket.on("settlement:add", ({ storeName, date, card, cash, delivery }) => {
     if (!FINANCE_STORES.includes(storeName) || typeof date !== "string" || !date) {
       return;
     }
@@ -305,15 +336,9 @@ io.on("connection", (socket) => {
       !Number.isFinite(card) ||
       !Number.isFinite(cash) ||
       !Number.isFinite(delivery) ||
-      !Number.isFinite(materialCost) ||
-      !Number.isFinite(laborCost) ||
-      !Number.isFinite(fixedCost) ||
       card < 0 ||
       cash < 0 ||
-      delivery < 0 ||
-      materialCost < 0 ||
-      laborCost < 0 ||
-      fixedCost < 0
+      delivery < 0
     ) {
       return;
     }
@@ -324,20 +349,46 @@ io.on("connection", (socket) => {
       card,
       cash,
       delivery,
-      materialCost,
-      laborCost,
-      fixedCost,
       createdAt: new Date().toISOString()
     });
     state.settlements = state.settlements
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     saveData(state);
     broadcastState();
-    }
-  );
+  });
 
   socket.on("settlement:remove", ({ id }) => {
     state.settlements = state.settlements.filter((entry) => entry.id !== id);
+    saveData(state);
+    broadcastState();
+  });
+
+  socket.on("expense:add", ({ storeName, date, type, amount, note }) => {
+    if (!FINANCE_STORES.includes(storeName) || typeof date !== "string" || !date) {
+      return;
+    }
+    if (!EXPENSE_TYPES.includes(type) || !Number.isFinite(amount) || amount < 0) {
+      return;
+    }
+    const normalizedNote = typeof note === "string" ? note.trim().slice(0, 120) : "";
+    state.expenses.unshift({
+      id: `expense-${Date.now()}`,
+      storeName,
+      date,
+      type,
+      amount,
+      note: normalizedNote,
+      createdAt: new Date().toISOString()
+    });
+    state.expenses = state.expenses
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .slice(0, 300);
+    saveData(state);
+    broadcastState();
+  });
+
+  socket.on("expense:remove", ({ id }) => {
+    state.expenses = state.expenses.filter((entry) => entry.id !== id);
     saveData(state);
     broadcastState();
   });

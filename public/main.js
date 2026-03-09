@@ -1,6 +1,10 @@
 const socket = io();
 
 const FINANCE_STORES = ["1호점", "2호점"];
+const EXPENSE_LABELS = {
+  labor: "인건비",
+  fixed: "고정비"
+};
 const TARGET_BY_STORE = {
   "1호점": 1000,
   "2호점": 500
@@ -12,18 +16,24 @@ const settlementDateEl = document.getElementById("settlementDate");
 const cardAmountEl = document.getElementById("cardAmount");
 const cashAmountEl = document.getElementById("cashAmount");
 const deliveryAmountEl = document.getElementById("deliveryAmount");
-const materialCostEl = document.getElementById("materialCost");
-const laborCostEl = document.getElementById("laborCost");
-const fixedCostEl = document.getElementById("fixedCost");
 const entryTotalEl = document.getElementById("entryTotal");
 const settlementListEl = document.getElementById("settlementList");
+
+const expenseForm = document.getElementById("expenseForm");
+const expenseDateEl = document.getElementById("expenseDate");
+const expenseTypeEl = document.getElementById("expenseType");
+const expenseAmountEl = document.getElementById("expenseAmount");
+const expenseNoteEl = document.getElementById("expenseNote");
+const expenseDayTotalEl = document.getElementById("expenseDayTotal");
+const expenseListEl = document.getElementById("expenseList");
+
 const weekSelectEl = document.getElementById("weekSelect");
 const weeklyCardsEl = document.getElementById("weeklyCards");
 const weeklyTableBodyEl = document.getElementById("weeklyTableBody");
 const monthPickerEl = document.getElementById("monthPicker");
 const contributionWrapEl = document.getElementById("contributionWrap");
 
-let currentState = { settlements: [] };
+let currentState = { settlements: [], expenses: [] };
 let selectedStore = FINANCE_STORES[0];
 let selectedWeekStart = "";
 let selectedMonth = "";
@@ -111,16 +121,18 @@ function getSettlements() {
   return Array.isArray(currentState.settlements) ? currentState.settlements : [];
 }
 
+function getExpenses() {
+  return Array.isArray(currentState.expenses) ? currentState.expenses : [];
+}
+
 function salesTotal(entry) {
   return (entry.card || 0) + (entry.cash || 0) + (entry.delivery || 0);
 }
 
-function costTotal(entry) {
-  return (entry.materialCost || 0) + (entry.laborCost || 0) + (entry.fixedCost || 0);
-}
-
-function netTotal(entry) {
-  return salesTotal(entry) - costTotal(entry);
+function expenseForDate(storeName, date) {
+  return getExpenses()
+    .filter((item) => item.storeName === storeName && item.date === date)
+    .reduce((sum, item) => sum + item.amount, 0);
 }
 
 function renderStoreTabs() {
@@ -134,6 +146,9 @@ function renderStoreTabs() {
       selectedStore = storeName;
       renderStoreTabs();
       renderSettlementList();
+      renderExpenseList();
+      updateEntryTotalHint();
+      renderExpenseDayTotal();
     });
     storeTabsEl.appendChild(btn);
   });
@@ -149,9 +164,9 @@ function renderSettlementList() {
   }
 
   settlements.slice(0, 20).forEach((entry) => {
-    const total = salesTotal(entry);
-    const cost = costTotal(entry);
-    const net = netTotal(entry);
+    const sales = salesTotal(entry);
+    const cost = expenseForDate(entry.storeName, entry.date);
+    const net = sales - cost;
     const li = document.createElement("li");
     li.className = "settlement-item";
     li.innerHTML = `
@@ -163,8 +178,8 @@ function renderSettlementList() {
         <span>카드 ${formatEUR(entry.card)}</span>
         <span>현금 ${formatEUR(entry.cash)}</span>
         <span>배달 ${formatEUR(entry.delivery)}</span>
-        <span>매출 ${formatEUR(total)}</span>
-        <span>비용 ${formatEUR(cost)}</span>
+        <span>매출 ${formatEUR(sales)}</span>
+        <span>지출 ${formatEUR(cost)}</span>
       </div>
       <button class="delete-btn">삭제</button>
     `;
@@ -179,9 +194,48 @@ function renderSettlementList() {
   });
 }
 
+function renderExpenseList() {
+  const expenses = getExpenses().filter((entry) => entry.storeName === selectedStore);
+  expenseListEl.innerHTML = "";
+
+  if (expenses.length === 0) {
+    expenseListEl.innerHTML = "<li>아직 등록된 지출 노트가 없습니다.</li>";
+    return;
+  }
+
+  expenses.slice(0, 20).forEach((entry) => {
+    const li = document.createElement("li");
+    li.className = "expense-item";
+    li.innerHTML = `
+      <div class="settlement-top">
+        <strong>${formatDateKOR(entry.date)}</strong>
+        <span class="settlement-total">${EXPENSE_LABELS[entry.type] || entry.type} ${formatEUR(entry.amount)}</span>
+      </div>
+      <div class="settlement-grid">
+        <span>${entry.note || "메모 없음"}</span>
+      </div>
+      <button class="delete-btn">삭제</button>
+    `;
+    li.querySelector(".delete-btn").addEventListener("click", () => {
+      const ok = window.confirm("이 지출 노트를 삭제할까요?");
+      if (!ok) {
+        return;
+      }
+      socket.emit("expense:remove", { id: entry.id });
+    });
+    expenseListEl.appendChild(li);
+  });
+}
+
 function weekOptions() {
   const starts = new Set();
   getSettlements().forEach((entry) => {
+    const start = toWeekStartISO(entry.date);
+    if (start) {
+      starts.add(start);
+    }
+  });
+  getExpenses().forEach((entry) => {
     const start = toWeekStartISO(entry.date);
     if (start) {
       starts.add(start);
@@ -225,7 +279,17 @@ function calcWeekSummary(weekStart) {
     target.card += entry.card;
     target.cash += entry.cash;
     target.delivery += entry.delivery;
-    target.cost += costTotal(entry);
+  });
+
+  getExpenses().forEach((entry) => {
+    if (toWeekStartISO(entry.date) !== weekStart) {
+      return;
+    }
+    const target = totalsByStore[entry.storeName];
+    if (!target) {
+      return;
+    }
+    target.cost += entry.amount;
   });
 
   const all = { card: 0, cash: 0, delivery: 0, cost: 0 };
@@ -246,7 +310,7 @@ function renderWeeklySummary() {
 
   weeklyCardsEl.innerHTML = `
     <div class="summary-pill">전체 매출 ${formatEUR(allSales)}</div>
-    <div class="summary-pill">전체 비용 ${formatEUR(all.cost)}</div>
+    <div class="summary-pill">전체 지출 ${formatEUR(all.cost)}</div>
     <div class="summary-pill">전체 순이익 ${formatEUR(allNet)}</div>
   `;
 
@@ -263,7 +327,7 @@ function renderWeeklySummary() {
       <td>${formatEUR(data.cash)}</td>
       <td>${formatEUR(data.delivery)}</td>
       <td>${formatEUR(sales)}</td>
-      <td>${formatEUR(net)} <small>(비용 ${formatEUR(data.cost)})</small></td>
+      <td>${formatEUR(net)} <small>(지출 ${formatEUR(data.cost)})</small></td>
     `;
     weeklyTableBodyEl.appendChild(row);
   });
@@ -276,7 +340,7 @@ function renderWeeklySummary() {
     <td>${formatEUR(all.cash)}</td>
     <td>${formatEUR(all.delivery)}</td>
     <td>${formatEUR(allSales)}</td>
-    <td>${formatEUR(allNet)} <small>(비용 ${formatEUR(all.cost)})</small></td>
+    <td>${formatEUR(allNet)} <small>(지출 ${formatEUR(all.cost)})</small></td>
   `;
   weeklyTableBodyEl.appendChild(allRow);
 }
@@ -321,7 +385,7 @@ function monthTotalsByStore(monthStr) {
     if (!map[entry.storeName] || typeof map[entry.storeName][entry.date] !== "number") {
       return;
     }
-    map[entry.storeName][entry.date] += entry.card + entry.cash + entry.delivery;
+    map[entry.storeName][entry.date] += salesTotal(entry);
   });
 
   return map;
@@ -377,21 +441,29 @@ function renderContributionGraph() {
   });
 }
 
+function renderExpenseDayTotal() {
+  const date = expenseDateEl.value || todayISO();
+  const cost = expenseForDate(selectedStore, date);
+  expenseDayTotalEl.textContent = `${selectedStore} ${formatDateKOR(date)} 지출 합계: ${formatEUR(cost)}`;
+}
+
 function updateEntryTotalHint() {
   const card = Number(cardAmountEl.value) || 0;
   const cash = Number(cashAmountEl.value) || 0;
   const delivery = Number(deliveryAmountEl.value) || 0;
-  const materialCost = Number(materialCostEl.value) || 0;
-  const laborCost = Number(laborCostEl.value) || 0;
-  const fixedCost = Number(fixedCostEl.value) || 0;
   const sales = card + cash + delivery;
-  const cost = materialCost + laborCost + fixedCost;
+  const date = settlementDateEl.value || todayISO();
+  const cost = expenseForDate(selectedStore, date);
   const net = sales - cost;
-  entryTotalEl.textContent = `입력 매출 ${formatEUR(sales)} | 비용 ${formatEUR(cost)} | 순이익 ${formatEUR(net)}`;
+  entryTotalEl.textContent = `입력 매출 ${formatEUR(sales)} | 해당일 지출 ${formatEUR(cost)} | 예상 순이익 ${formatEUR(net)}`;
 }
 
-[cardAmountEl, cashAmountEl, deliveryAmountEl, materialCostEl, laborCostEl, fixedCostEl].forEach((input) => {
+[cardAmountEl, cashAmountEl, deliveryAmountEl, settlementDateEl].forEach((input) => {
   input.addEventListener("input", updateEntryTotalHint);
+});
+
+[expenseDateEl, expenseAmountEl].forEach((input) => {
+  input.addEventListener("input", renderExpenseDayTotal);
 });
 
 settlementForm.addEventListener("submit", (event) => {
@@ -400,18 +472,8 @@ settlementForm.addEventListener("submit", (event) => {
   const card = safeAmount(cardAmountEl.value);
   const cash = safeAmount(cashAmountEl.value);
   const delivery = safeAmount(deliveryAmountEl.value);
-  const materialCost = safeAmount(materialCostEl.value || 0);
-  const laborCost = safeAmount(laborCostEl.value || 0);
-  const fixedCost = safeAmount(fixedCostEl.value || 0);
 
-  if (
-    card === null ||
-    cash === null ||
-    delivery === null ||
-    materialCost === null ||
-    laborCost === null ||
-    fixedCost === null
-  ) {
+  if (card === null || cash === null || delivery === null) {
     window.alert("금액은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
@@ -421,15 +483,35 @@ settlementForm.addEventListener("submit", (event) => {
     date: settlementDateEl.value,
     card,
     cash,
-    delivery,
-    materialCost,
-    laborCost,
-    fixedCost
+    delivery
   });
 
   settlementForm.reset();
   settlementDateEl.value = todayISO();
   updateEntryTotalHint();
+});
+
+expenseForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const amount = safeAmount(expenseAmountEl.value);
+
+  if (amount === null) {
+    window.alert("지출 금액은 0 이상의 숫자로 입력해 주세요.");
+    return;
+  }
+
+  socket.emit("expense:add", {
+    storeName: selectedStore,
+    date: expenseDateEl.value,
+    type: expenseTypeEl.value,
+    amount,
+    note: expenseNoteEl.value.trim()
+  });
+
+  expenseForm.reset();
+  expenseDateEl.value = todayISO();
+  expenseTypeEl.value = "labor";
+  renderExpenseDayTotal();
 });
 
 weekSelectEl.addEventListener("change", () => {
@@ -452,12 +534,18 @@ socket.on("state:update", (state) => {
 
   renderStoreTabs();
   renderSettlementList();
+  renderExpenseList();
   renderWeekSelect();
   renderWeeklySummary();
   renderContributionGraph();
+  updateEntryTotalHint();
+  renderExpenseDayTotal();
 });
 
 settlementDateEl.value = todayISO();
+expenseDateEl.value = todayISO();
+expenseTypeEl.value = "labor";
 selectedMonth = monthISO();
 monthPickerEl.value = selectedMonth;
 updateEntryTotalHint();
+renderExpenseDayTotal();
