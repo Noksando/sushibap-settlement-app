@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>매장 정산 대시보드</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="page-header">
+        <h1>매장 정산 대시보드</h1>
+        <p>카드, 현금, 배달 정산을 기록하고 주간/월간 흐름을 빠르게 확인하세요.</p>
+      </header>
+
+      <section class="card">
+        <h2>정산 입력</h2>
+        <div id="storeTabs" class="tabs"></div>
+        <form id="settlementForm" class="row-form">
+          <input id="settlementDate" type="date" required />
+          <input id="cardAmount" type="number" min="0" step="0.01" placeholder="카드 (EUR)" required />
+          <input id="cashAmount" type="number" min="0" step="0.01" placeholder="현금 (EUR)" required />
+          <input id="deliveryAmount" type="number" min="0" step="0.01" placeholder="배달 (EUR)" required />
+          <button type="submit">정산 저장</button>
+        </form>
+        <p id="entryTotal" class="entry-total"></p>
+        <ul id="settlementList" class="settlement-list"></ul>
+      </section>
+
+      <section class="card">
+        <div class="summary-head">
+          <h2>주간 요약</h2>
+          <select id="weekSelect"></select>
+        </div>
+        <div id="weeklyCards" class="weekly-cards"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>구분</th>
+                <th>카드</th>
+                <th>현금</th>
+                <th>배달</th>
+                <th>총합</th>
+              </tr>
+            </thead>
+            <tbody id="weeklyTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="summary-head">
+          <h2>월간 Contribution Graph</h2>
+          <input id="monthPicker" type="month" />
+        </div>
+        <div id="contributionWrap" class="contribution-wrap"></div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "stores": {
+    "1호점": {
+      "치킨바이트": 3,
+      "연어": 8,
+      "계란말이": 5
+    },
+    "2호점": {
+      "치킨바이트": 6,
+      "연어": 4,
+      "계란말이": 7
+    },
+    "부엌": {
+      "치킨바이트": 10,
+      "연어": 15,
+      "계란말이": 12
+    }
+  },
+  "openedBills": [
+    {
+      "id": "bill-1",
+      "company": "동해식자재",
+      "receivedAt": "2026-03-05",
+      "amount": 180000,
+      "reference": ""
+    }
+  ],
+  "paidBills": [],
+  "notices": [],
+  "settlements": [
+    {
+      "id": "settlement-1",
+      "storeName": "1호점",
+      "date": "2026-03-09",
+      "card": 780,
+      "cash": 120,
+      "delivery": 210,
+      "createdAt": "2026-03-09T08:00:00.000Z"
+    },
+    {
+      "id": "settlement-2",
+      "storeName": "2호점",
+      "date": "2026-03-09",
+      "card": 260,
+      "cash": 90,
+      "delivery": 110,
+      "createdAt": "2026-03-09T08:05:00.000Z"
+    }
+  ]
+}
