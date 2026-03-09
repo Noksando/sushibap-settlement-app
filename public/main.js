@@ -139,9 +139,9 @@ function getMonthlyFixedCosts() {
   return Array.isArray(currentState.monthlyFixedCosts) ? currentState.monthlyFixedCosts : [];
 }
 
-function getFixedByMonth(storeName, month) {
+function getFixedByMonth(month) {
   return (
-    getMonthlyFixedCosts().find((entry) => entry.storeName === storeName && entry.month === month) || {
+    getMonthlyFixedCosts().find((entry) => entry.month === month) || {
       salary: 0,
       rent: 0,
       insurance: 0
@@ -159,9 +159,9 @@ function dailyExpenseForDate(storeName, date) {
     .reduce((sum, entry) => sum + entry.amount, 0);
 }
 
-function fixedPerDay(storeName, date) {
+function fixedPerDay(date) {
   const month = String(date).slice(0, 7);
-  const fixed = getFixedByMonth(storeName, month);
+  const fixed = getFixedByMonth(month);
   const [year, monthNum] = month.split("-").map(Number);
   if (!year || !monthNum) {
     return 0;
@@ -204,7 +204,7 @@ function renderSettlementList() {
   settlements.slice(0, 20).forEach((entry) => {
     const sales = salesTotal(entry);
     const dailyExpense = dailyExpenseForDate(entry.storeName, entry.date);
-    const fixedDaily = fixedPerDay(entry.storeName, entry.date);
+    const fixedDaily = fixedPerDay(entry.date);
     const net = sales - dailyExpense - fixedDaily;
 
     const li = document.createElement("li");
@@ -267,7 +267,7 @@ function renderExpenseList() {
 }
 
 function renderFixedCostList() {
-  const fixedCosts = getMonthlyFixedCosts().filter((entry) => entry.storeName === selectedStore);
+  const fixedCosts = getMonthlyFixedCosts();
   fixedCostListEl.innerHTML = "";
 
   if (fixedCosts.length === 0) {
@@ -339,7 +339,7 @@ function renderWeekSelect() {
 function calcWeekSummary(weekStart) {
   const totalsByStore = {};
   FINANCE_STORES.forEach((store) => {
-    totalsByStore[store] = { card: 0, cash: 0, delivery: 0, dailyExpense: 0, fixedCost: 0 };
+    totalsByStore[store] = { card: 0, cash: 0, delivery: 0, dailyExpense: 0 };
   });
 
   getSettlements().forEach((entry) => {
@@ -366,19 +366,17 @@ function calcWeekSummary(weekStart) {
     target.dailyExpense += entry.amount;
   });
 
-  FINANCE_STORES.forEach((store) => {
-    for (let offset = 0; offset < 7; offset += 1) {
-      totalsByStore[store].fixedCost += fixedPerDay(store, addDaysISO(weekStart, offset));
-    }
-  });
+  let fixedCost = 0;
+  for (let offset = 0; offset < 7; offset += 1) {
+    fixedCost += fixedPerDay(addDaysISO(weekStart, offset));
+  }
 
-  const all = { card: 0, cash: 0, delivery: 0, dailyExpense: 0, fixedCost: 0 };
+  const all = { card: 0, cash: 0, delivery: 0, dailyExpense: 0, fixedCost };
   FINANCE_STORES.forEach((store) => {
     all.card += totalsByStore[store].card;
     all.cash += totalsByStore[store].cash;
     all.delivery += totalsByStore[store].delivery;
     all.dailyExpense += totalsByStore[store].dailyExpense;
-    all.fixedCost += totalsByStore[store].fixedCost;
   });
 
   return { totalsByStore, all };
@@ -401,7 +399,7 @@ function renderWeeklySummary() {
   FINANCE_STORES.forEach((store) => {
     const data = totalsByStore[store];
     const sales = data.card + data.cash + data.delivery;
-    const net = sales - (data.dailyExpense + data.fixedCost);
+    const net = sales - data.dailyExpense;
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${store}</td>
@@ -409,7 +407,7 @@ function renderWeeklySummary() {
       <td>${formatEUR(data.cash)}</td>
       <td>${formatEUR(data.delivery)}</td>
       <td>${formatEUR(sales)}</td>
-      <td>${formatEUR(net)} <small>(재료 ${formatEUR(data.dailyExpense)} + 고정 ${formatEUR(data.fixedCost)})</small></td>
+      <td>${formatEUR(net)} <small>(재료 ${formatEUR(data.dailyExpense)})</small></td>
     `;
     weeklyTableBodyEl.appendChild(row);
   });
@@ -515,16 +513,16 @@ function renderExpenseDayTotal() {
 
 function renderFixedMonthTotal() {
   const month = fixedMonthEl.value || monthISO();
-  const fixed = getFixedByMonth(selectedStore, month);
+  const fixed = getFixedByMonth(month);
   const total = (fixed.salary || 0) + (fixed.rent || 0) + (fixed.insurance || 0);
-  fixedMonthTotalEl.textContent = `${selectedStore} ${month} 고정비: 월급 ${formatEUR(
+  fixedMonthTotalEl.textContent = `${month} 고정비: 월급 ${formatEUR(
     fixed.salary || 0
   )} + 월세 ${formatEUR(fixed.rent || 0)} + 보험비 ${formatEUR(fixed.insurance || 0)} = ${formatEUR(total)}`;
 }
 
 function syncFixedInputs() {
   const month = fixedMonthEl.value || monthISO();
-  const fixed = getFixedByMonth(selectedStore, month);
+  const fixed = getFixedByMonth(month);
   salaryAmountEl.value = String(fixed.salary || 0);
   rentAmountEl.value = String(fixed.rent || 0);
   insuranceAmountEl.value = String(fixed.insurance || 0);
@@ -534,7 +532,7 @@ function updateEntryTotalHint() {
   const sales = (Number(cardAmountEl.value) || 0) + (Number(cashAmountEl.value) || 0) + (Number(deliveryAmountEl.value) || 0);
   const date = settlementDateEl.value || todayISO();
   const dailyExpense = dailyExpenseForDate(selectedStore, date);
-  const fixedDaily = fixedPerDay(selectedStore, date);
+  const fixedDaily = fixedPerDay(date);
   const net = sales - dailyExpense - fixedDaily;
   entryTotalEl.textContent = `입력 매출 ${formatEUR(sales)} | 재료비 ${formatEUR(
     dailyExpense
@@ -597,7 +595,7 @@ salaryForm.addEventListener("submit", (event) => {
     window.alert("월급은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-  socket.emit("fixedCost:setItem", { storeName: selectedStore, month: fixedMonthEl.value, item: "salary", amount });
+  socket.emit("fixedCost:setItem", { month: fixedMonthEl.value, item: "salary", amount });
 });
 
 rentForm.addEventListener("submit", (event) => {
@@ -607,7 +605,7 @@ rentForm.addEventListener("submit", (event) => {
     window.alert("월세는 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-  socket.emit("fixedCost:setItem", { storeName: selectedStore, month: fixedMonthEl.value, item: "rent", amount });
+  socket.emit("fixedCost:setItem", { month: fixedMonthEl.value, item: "rent", amount });
 });
 
 insuranceForm.addEventListener("submit", (event) => {
@@ -617,7 +615,7 @@ insuranceForm.addEventListener("submit", (event) => {
     window.alert("보험비는 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-  socket.emit("fixedCost:setItem", { storeName: selectedStore, month: fixedMonthEl.value, item: "insurance", amount });
+  socket.emit("fixedCost:setItem", { month: fixedMonthEl.value, item: "insurance", amount });
 });
 
 weekSelectEl.addEventListener("change", () => {

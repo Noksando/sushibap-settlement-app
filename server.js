@@ -80,7 +80,6 @@ const defaultData = {
   monthlyFixedCosts: [
     {
       id: "fixed-1",
-      storeName: "2호점",
       month: "2026-03",
       salary: 1100,
       rent: 600,
@@ -124,10 +123,9 @@ function normalizeState(rawData) {
           return;
         }
         const month = entry.date.slice(0, 7);
-        const key = `${entry.storeName}:${month}`;
+        const key = month;
         const prev = fixedMap.get(key) || {
           id: `fixed-${Date.now()}-${Math.random()}`,
-          storeName: entry.storeName,
           month,
           salary: 0,
           rent: 0,
@@ -197,9 +195,6 @@ function normalizeState(rawData) {
       if (!entry || typeof entry !== "object") {
         return false;
       }
-      if (!FINANCE_STORES.includes(entry.storeName)) {
-        return false;
-      }
       if (typeof entry.month !== "string" || !/^\d{4}-\d{2}$/.test(entry.month)) {
         return false;
       }
@@ -216,6 +211,24 @@ function normalizeState(rawData) {
       ...entry,
       insurance: Number.isFinite(entry.insurance) && entry.insurance >= 0 ? entry.insurance : 0
     }))
+    .reduce((acc, entry) => {
+      const existing = acc.find((item) => item.month === entry.month);
+      if (!existing) {
+        acc.push({
+          id: entry.id,
+          month: entry.month,
+          salary: entry.salary,
+          rent: entry.rent,
+          insurance: entry.insurance,
+          updatedAt: entry.updatedAt || new Date().toISOString()
+        });
+      } else {
+        existing.salary += entry.salary;
+        existing.rent += entry.rent;
+        existing.insurance += entry.insurance;
+      }
+      return acc;
+    }, [])
     .sort((a, b) => String(b.month || "").localeCompare(String(a.month || "")));
 
   return next;
@@ -452,15 +465,15 @@ io.on("connection", (socket) => {
     broadcastState();
   });
 
-  socket.on("fixedCost:set", ({ storeName, month, salary, rent }) => {
-    if (!FINANCE_STORES.includes(storeName) || typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
+  socket.on("fixedCost:set", ({ month, salary, rent }) => {
+    if (typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
       return;
     }
     if (!Number.isFinite(salary) || !Number.isFinite(rent) || salary < 0 || rent < 0) {
       return;
     }
     const existing = state.monthlyFixedCosts.find(
-      (entry) => entry.storeName === storeName && entry.month === month
+      (entry) => entry.month === month
     );
     if (existing) {
       existing.salary = salary;
@@ -470,7 +483,6 @@ io.on("connection", (socket) => {
     } else {
       state.monthlyFixedCosts.unshift({
         id: `fixed-${Date.now()}`,
-        storeName,
         month,
         salary,
         rent,
@@ -485,8 +497,8 @@ io.on("connection", (socket) => {
     broadcastState();
   });
 
-  socket.on("fixedCost:setItem", ({ storeName, month, item, amount }) => {
-    if (!FINANCE_STORES.includes(storeName) || typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
+  socket.on("fixedCost:setItem", ({ month, item, amount }) => {
+    if (typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
       return;
     }
     if (!["salary", "rent", "insurance"].includes(item)) {
@@ -496,11 +508,10 @@ io.on("connection", (socket) => {
       return;
     }
 
-    let target = state.monthlyFixedCosts.find((entry) => entry.storeName === storeName && entry.month === month);
+    let target = state.monthlyFixedCosts.find((entry) => entry.month === month);
     if (!target) {
       target = {
         id: `fixed-${Date.now()}`,
-        storeName,
         month,
         salary: 0,
         rent: 0,

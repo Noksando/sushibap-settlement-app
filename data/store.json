@@ -61,7 +61,6 @@
   "monthlyFixedCosts": [
     {
       "id": "fixed-1",
-      "storeName": "2호점",
       "month": "2026-03",
       "salary": 1100,
       "rent": 600,
