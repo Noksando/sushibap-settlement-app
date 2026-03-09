@@ -22,7 +22,6 @@ const expenseNoteEl = document.getElementById("expenseNote");
 const expenseDayTotalEl = document.getElementById("expenseDayTotal");
 const expenseListEl = document.getElementById("expenseList");
 
-const fixedMonthForm = document.getElementById("fixedMonthForm");
 const salaryForm = document.getElementById("salaryForm");
 const rentForm = document.getElementById("rentForm");
 const insuranceForm = document.getElementById("insuranceForm");
@@ -186,7 +185,6 @@ function renderStoreTabs() {
       updateEntryTotalHint();
       renderExpenseDayTotal();
       renderFixedMonthTotal();
-      syncFixedInputs();
     });
     storeTabsEl.appendChild(btn);
   });
@@ -520,14 +518,6 @@ function renderFixedMonthTotal() {
   )} + 월세 ${formatEUR(fixed.rent || 0)} + 보험비 ${formatEUR(fixed.insurance || 0)} = ${formatEUR(total)}`;
 }
 
-function syncFixedInputs() {
-  const month = fixedMonthEl.value || monthISO();
-  const fixed = getFixedByMonth(month);
-  salaryAmountEl.value = String(fixed.salary || 0);
-  rentAmountEl.value = String(fixed.rent || 0);
-  insuranceAmountEl.value = String(fixed.insurance || 0);
-}
-
 function updateEntryTotalHint() {
   const sales = (Number(cardAmountEl.value) || 0) + (Number(cashAmountEl.value) || 0) + (Number(deliveryAmountEl.value) || 0);
   const date = settlementDateEl.value || todayISO();
@@ -543,7 +533,6 @@ function updateEntryTotalHint() {
 expenseDateEl.addEventListener("input", renderExpenseDayTotal);
 fixedMonthEl.addEventListener("input", () => {
   renderFixedMonthTotal();
-  syncFixedInputs();
 });
 [salaryAmountEl, rentAmountEl, insuranceAmountEl].forEach((input) => input.addEventListener("input", renderFixedMonthTotal));
 
@@ -582,12 +571,6 @@ expenseForm.addEventListener("submit", (event) => {
   renderExpenseDayTotal();
 });
 
-fixedMonthForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  renderFixedMonthTotal();
-  syncFixedInputs();
-});
-
 salaryForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const amount = safeAmount(salaryAmountEl.value);
@@ -596,6 +579,7 @@ salaryForm.addEventListener("submit", (event) => {
     return;
   }
   socket.emit("fixedCost:setItem", { month: fixedMonthEl.value, item: "salary", amount });
+  salaryAmountEl.value = "";
 });
 
 rentForm.addEventListener("submit", (event) => {
@@ -606,6 +590,7 @@ rentForm.addEventListener("submit", (event) => {
     return;
   }
   socket.emit("fixedCost:setItem", { month: fixedMonthEl.value, item: "rent", amount });
+  rentAmountEl.value = "";
 });
 
 insuranceForm.addEventListener("submit", (event) => {
@@ -616,6 +601,7 @@ insuranceForm.addEventListener("submit", (event) => {
     return;
   }
   socket.emit("fixedCost:setItem", { month: fixedMonthEl.value, item: "insurance", amount });
+  insuranceAmountEl.value = "";
 });
 
 weekSelectEl.addEventListener("change", () => {
@@ -646,7 +632,6 @@ socket.on("state:update", (state) => {
   updateEntryTotalHint();
   renderExpenseDayTotal();
   renderFixedMonthTotal();
-  syncFixedInputs();
 });
 
 settlementDateEl.value = todayISO();
@@ -657,4 +642,3 @@ monthPickerEl.value = selectedMonth;
 updateEntryTotalHint();
 renderExpenseDayTotal();
 renderFixedMonthTotal();
-syncFixedInputs();

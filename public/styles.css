@@ -103,6 +103,11 @@ h2 {
   margin-top: 8px;
 }
 
+.fixed-month-picker {
+  max-width: 220px;
+  margin-bottom: 8px;
+}
+
 input,
 button,
 select {
@@ -115,7 +120,8 @@ select {
 }
 
 .row-form input[type="date"],
-.summary-head input[type="month"] {
+.summary-head input[type="month"],
+.fixed-month-picker input[type="month"] {
   width: 100%;
   max-width: 100%;
   min-width: 0;
