@@ -75,7 +75,7 @@ h2 {
 
 .row-form {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -87,6 +87,13 @@ select {
   padding: 9px 10px;
   font-size: 14px;
   width: 100%;
+  min-width: 0;
+}
+
+.row-form input[type="date"],
+.summary-head input[type="month"] {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
