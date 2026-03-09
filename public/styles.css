@@ -89,6 +89,11 @@ h2 {
   min-width: 0;
 }
 
+.fixed-cost-form,
+.fixed-item-form {
+  grid-template-columns: minmax(140px, 220px) 1fr;
+}
+
 input,
 button,
 select {
@@ -341,6 +346,11 @@ td small {
 
   .row-form button {
     grid-column: auto;
+  }
+
+  .fixed-cost-form,
+  .fixed-item-form {
+    grid-template-columns: 1fr;
   }
 
   .summary-head {

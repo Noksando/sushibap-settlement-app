@@ -22,10 +22,14 @@ const expenseNoteEl = document.getElementById("expenseNote");
 const expenseDayTotalEl = document.getElementById("expenseDayTotal");
 const expenseListEl = document.getElementById("expenseList");
 
-const fixedCostForm = document.getElementById("fixedCostForm");
+const fixedMonthForm = document.getElementById("fixedMonthForm");
+const salaryForm = document.getElementById("salaryForm");
+const rentForm = document.getElementById("rentForm");
+const insuranceForm = document.getElementById("insuranceForm");
 const fixedMonthEl = document.getElementById("fixedMonth");
 const salaryAmountEl = document.getElementById("salaryAmount");
 const rentAmountEl = document.getElementById("rentAmount");
+const insuranceAmountEl = document.getElementById("insuranceAmount");
 const fixedMonthTotalEl = document.getElementById("fixedMonthTotal");
 const fixedCostListEl = document.getElementById("fixedCostList");
 
@@ -64,6 +68,37 @@ function parseLocalDate(dateStr) {
   return new Date(year, month - 1, day);
 }
 
+function addDaysISO(dateStr, days) {
+  const date = parseLocalDate(dateStr);
+  if (!date) {
+    return dateStr;
+  }
+  date.setDate(date.getDate() + days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function daysInMonth(year, monthIndex) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function toWeekStartISO(dateStr) {
+  const date = parseLocalDate(dateStr);
+  if (!date) {
+    return "";
+  }
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  const start = new Date(date);
+  start.setDate(start.getDate() + offset);
+  const y = start.getFullYear();
+  const m = String(start.getMonth() + 1).padStart(2, "0");
+  const d = String(start.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function formatEUR(amount) {
   return new Intl.NumberFormat("de-DE", {
     style: "currency",
@@ -82,37 +117,6 @@ function formatDateKOR(dateStr) {
     month: "2-digit",
     day: "2-digit"
   }).format(parsed);
-}
-
-function toWeekStartISO(dateStr) {
-  const date = parseLocalDate(dateStr);
-  if (!date) {
-    return "";
-  }
-  const day = date.getDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  const start = new Date(date);
-  start.setDate(start.getDate() + offset);
-  const y = start.getFullYear();
-  const m = String(start.getMonth() + 1).padStart(2, "0");
-  const d = String(start.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function addDaysISO(dateStr, days) {
-  const date = parseLocalDate(dateStr);
-  if (!date) {
-    return dateStr;
-  }
-  date.setDate(date.getDate() + days);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function daysInMonth(year, monthIndex) {
-  return new Date(year, monthIndex + 1, 0).getDate();
 }
 
 function safeAmount(value) {
@@ -139,7 +143,8 @@ function getFixedByMonth(storeName, month) {
   return (
     getMonthlyFixedCosts().find((entry) => entry.storeName === storeName && entry.month === month) || {
       salary: 0,
-      rent: 0
+      rent: 0,
+      insurance: 0
     }
   );
 }
@@ -161,7 +166,7 @@ function fixedPerDay(storeName, date) {
   if (!year || !monthNum) {
     return 0;
   }
-  const perMonth = (fixed.salary || 0) + (fixed.rent || 0);
+  const perMonth = (fixed.salary || 0) + (fixed.rent || 0) + (fixed.insurance || 0);
   return perMonth / daysInMonth(year, monthNum - 1);
 }
 
@@ -181,6 +186,7 @@ function renderStoreTabs() {
       updateEntryTotalHint();
       renderExpenseDayTotal();
       renderFixedMonthTotal();
+      syncFixedInputs();
     });
     storeTabsEl.appendChild(btn);
   });
@@ -271,7 +277,7 @@ function renderFixedCostList() {
   }
 
   fixedCosts.slice(0, 12).forEach((entry) => {
-    const total = (entry.salary || 0) + (entry.rent || 0);
+    const total = (entry.salary || 0) + (entry.rent || 0) + (entry.insurance || 0);
     const li = document.createElement("li");
     li.className = "expense-item";
     li.innerHTML = `
@@ -280,8 +286,9 @@ function renderFixedCostList() {
         <span class="settlement-total">총 ${formatEUR(total)}</span>
       </div>
       <div class="settlement-grid">
-        <span>월급 ${formatEUR(entry.salary)}</span>
-        <span>월세 ${formatEUR(entry.rent)}</span>
+        <span>월급 ${formatEUR(entry.salary || 0)}</span>
+        <span>월세 ${formatEUR(entry.rent || 0)}</span>
+        <span>보험비 ${formatEUR(entry.insurance || 0)}</span>
       </div>
       <button class="delete-btn">삭제</button>
     `;
@@ -526,10 +533,18 @@ function renderExpenseDayTotal() {
 function renderFixedMonthTotal() {
   const month = fixedMonthEl.value || monthISO();
   const fixed = getFixedByMonth(selectedStore, month);
-  const total = (fixed.salary || 0) + (fixed.rent || 0);
+  const total = (fixed.salary || 0) + (fixed.rent || 0) + (fixed.insurance || 0);
   fixedMonthTotalEl.textContent = `${selectedStore} ${month} 고정비: 월급 ${formatEUR(
     fixed.salary || 0
-  )} + 월세 ${formatEUR(fixed.rent || 0)} = ${formatEUR(total)}`;
+  )} + 월세 ${formatEUR(fixed.rent || 0)} + 보험비 ${formatEUR(fixed.insurance || 0)} = ${formatEUR(total)}`;
+}
+
+function syncFixedInputs() {
+  const month = fixedMonthEl.value || monthISO();
+  const fixed = getFixedByMonth(selectedStore, month);
+  salaryAmountEl.value = String(fixed.salary || 0);
+  rentAmountEl.value = String(fixed.rent || 0);
+  insuranceAmountEl.value = String(fixed.insurance || 0);
 }
 
 function updateEntryTotalHint() {
@@ -554,7 +569,14 @@ function updateEntryTotalHint() {
   input.addEventListener("input", renderExpenseDayTotal);
 });
 
-[fixedMonthEl, salaryAmountEl, rentAmountEl].forEach((input) => {
+[fixedMonthEl].forEach((input) => {
+  input.addEventListener("input", () => {
+    renderFixedMonthTotal();
+    syncFixedInputs();
+  });
+});
+
+[salaryAmountEl, rentAmountEl, insuranceAmountEl].forEach((input) => {
   input.addEventListener("input", renderFixedMonthTotal);
 });
 
@@ -604,26 +626,55 @@ expenseForm.addEventListener("submit", (event) => {
   renderExpenseDayTotal();
 });
 
-fixedCostForm.addEventListener("submit", (event) => {
+fixedMonthForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const salary = safeAmount(salaryAmountEl.value);
-  const rent = safeAmount(rentAmountEl.value);
+  renderFixedMonthTotal();
+  syncFixedInputs();
+});
 
-  if (salary === null || rent === null) {
-    window.alert("월급/월세는 0 이상의 숫자로 입력해 주세요.");
+salaryForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = safeAmount(salaryAmountEl.value);
+  if (value === null) {
+    window.alert("월급은 0 이상의 숫자로 입력해 주세요.");
     return;
   }
-
-  socket.emit("fixedCost:set", {
+  socket.emit("fixedCost:setItem", {
     storeName: selectedStore,
     month: fixedMonthEl.value,
-    salary,
-    rent
+    item: "salary",
+    amount: value
   });
+});
 
-  fixedCostForm.reset();
-  fixedMonthEl.value = monthISO();
-  renderFixedMonthTotal();
+rentForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = safeAmount(rentAmountEl.value);
+  if (value === null) {
+    window.alert("월세는 0 이상의 숫자로 입력해 주세요.");
+    return;
+  }
+  socket.emit("fixedCost:setItem", {
+    storeName: selectedStore,
+    month: fixedMonthEl.value,
+    item: "rent",
+    amount: value
+  });
+});
+
+insuranceForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = safeAmount(insuranceAmountEl.value);
+  if (value === null) {
+    window.alert("보험비는 0 이상의 숫자로 입력해 주세요.");
+    return;
+  }
+  socket.emit("fixedCost:setItem", {
+    storeName: selectedStore,
+    month: fixedMonthEl.value,
+    item: "insurance",
+    amount: value
+  });
 });
 
 weekSelectEl.addEventListener("change", () => {
@@ -654,6 +705,7 @@ socket.on("state:update", (state) => {
   updateEntryTotalHint();
   renderExpenseDayTotal();
   renderFixedMonthTotal();
+  syncFixedInputs();
 });
 
 settlementDateEl.value = todayISO();
@@ -664,3 +716,4 @@ monthPickerEl.value = selectedMonth;
 updateEntryTotalHint();
 renderExpenseDayTotal();
 renderFixedMonthTotal();
+syncFixedInputs();

@@ -84,6 +84,7 @@ const defaultData = {
       month: "2026-03",
       salary: 1100,
       rent: 600,
+      insurance: 120,
       updatedAt: "2026-03-01T00:00:00.000Z"
     }
   ]
@@ -206,9 +207,15 @@ function normalizeState(rawData) {
         Number.isFinite(entry.salary) &&
         entry.salary >= 0 &&
         Number.isFinite(entry.rent) &&
-        entry.rent >= 0
+        entry.rent >= 0 &&
+        Number.isFinite(entry.insurance ?? 0) &&
+        (entry.insurance ?? 0) >= 0
       );
     })
+    .map((entry) => ({
+      ...entry,
+      insurance: Number.isFinite(entry.insurance) && entry.insurance >= 0 ? entry.insurance : 0
+    }))
     .sort((a, b) => String(b.month || "").localeCompare(String(a.month || "")));
 
   return next;
@@ -458,6 +465,7 @@ io.on("connection", (socket) => {
     if (existing) {
       existing.salary = salary;
       existing.rent = rent;
+      existing.insurance = Number.isFinite(existing.insurance) && existing.insurance >= 0 ? existing.insurance : 0;
       existing.updatedAt = new Date().toISOString();
     } else {
       state.monthlyFixedCosts.unshift({
@@ -466,9 +474,44 @@ io.on("connection", (socket) => {
         month,
         salary,
         rent,
+        insurance: 0,
         updatedAt: new Date().toISOString()
       });
     }
+    state.monthlyFixedCosts = state.monthlyFixedCosts
+      .sort((a, b) => String(b.month || "").localeCompare(String(a.month || "")))
+      .slice(0, 120);
+    saveData(state);
+    broadcastState();
+  });
+
+  socket.on("fixedCost:setItem", ({ storeName, month, item, amount }) => {
+    if (!FINANCE_STORES.includes(storeName) || typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
+      return;
+    }
+    if (!["salary", "rent", "insurance"].includes(item)) {
+      return;
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
+      return;
+    }
+
+    let target = state.monthlyFixedCosts.find((entry) => entry.storeName === storeName && entry.month === month);
+    if (!target) {
+      target = {
+        id: `fixed-${Date.now()}`,
+        storeName,
+        month,
+        salary: 0,
+        rent: 0,
+        insurance: 0,
+        updatedAt: new Date().toISOString()
+      };
+      state.monthlyFixedCosts.unshift(target);
+    }
+
+    target[item] = amount;
+    target.updatedAt = new Date().toISOString();
     state.monthlyFixedCosts = state.monthlyFixedCosts
       .sort((a, b) => String(b.month || "").localeCompare(String(a.month || "")))
       .slice(0, 120);
